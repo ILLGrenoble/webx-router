@@ -6,6 +6,7 @@ extern crate log;
 use env_logger::Env;
 
 mod connector;
+mod publisher;
 
 fn main() {
     let env = Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info");

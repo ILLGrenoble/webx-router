@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use crate::publisher::Publisher;
 
 static CONNECTOR_PORT: i32 = 5555;
 static COLLECTOR_PORT: i32 = 5556;
@@ -8,13 +9,15 @@ static PUBLISHER_PORT: i32 = 5557;
 
 pub struct Connector {
     running: Arc<AtomicBool>,
+    publisher: Publisher,
 }
 
 impl Connector {
 
     pub fn new() -> Self {
         Self{
-            running: Arc::new(AtomicBool::new(true))
+            running: Arc::new(AtomicBool::new(true)),
+            publisher: Publisher::new()
         }
     }
 
@@ -23,12 +26,17 @@ impl Connector {
         ctrlc::set_handler(move || {
             running.store(false, Ordering::SeqCst);
         }).expect("Error setting Ctrl-C handler");
+
     }
 
     pub fn run(&self, socket_timeout_ms: i32) {
-        let ctx = zmq::Context::new();
-        let socket = ctx.socket(zmq::REP).unwrap();
+        let context = zmq::Context::new();
 
+        // Start the publisher
+        self.publisher.run(&context);
+
+
+        let socket = context.socket(zmq::REP).unwrap();
         socket.set_linger(0).unwrap();
         socket.set_rcvtimeo(socket_timeout_ms).unwrap();
 
@@ -73,18 +81,16 @@ impl Connector {
                         error!("Failed to send empty message: {}", error);
                     }
                 }
-
-            } else {
-                self.stop();
             }
-
         }
+
+        self.stop();
     }
 
     fn stop(&self) {
         info!("Stopping WebX Router...");
-        self.running.store(false, Ordering::SeqCst);
 
+        self.publisher.stop();
     }
 
     fn is_running(&self) -> bool {
