@@ -49,6 +49,7 @@ impl Publisher {
                         error!("Failed to received message on engine subscriber: {}", error);
 
                     } else {
+                        debug!("Got message from engine of length {}", msg.len());
                         // Resend message on publisher socket
                         if let Err(error) = relay_publisher_socket.send(msg, 0) {
                             error!("Failed to send message on relay publisher: {}", error);
