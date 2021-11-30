@@ -1,4 +1,5 @@
 use crate::pub_sub_proxy::PubSubProxy;
+use crate::pull_push_proxy::PullPushProxy;
 use crate::process_communicator::{ProcessCommunicator, SHUTDOWN_COMMAND, RELAY_CONNECTOR_PORT, RELAY_PUBLISHER_PORT, RELAY_COLLECTOR_PORT};
 use std::thread;
 
@@ -15,8 +16,11 @@ impl Connector {
     }
 
     pub fn run(&self) {
-        // Create and run the publisher in separate thread
+        // Create and run the pub-sub proxy in separate thread
         let pub_sub_proxy_thread = self.create_pub_sub_proxy_thread(self.context.clone());
+
+        // Create and run the pull-push proxy in separate thread
+        let pull_push_proxy_thread = self.create_pull_push_proxy_thread(self.context.clone());
 
         // Create REP socket
         let rep_socket = self.create_rep_socket().unwrap();
@@ -76,8 +80,11 @@ impl Connector {
 
         info!("Stopped client connector");
 
-        // Join publisher thread
+        // Join pub-sub proxy thread
         pub_sub_proxy_thread.join().unwrap();
+
+        // Join pull-push proxy thread
+        pull_push_proxy_thread.join().unwrap();
     }
 
     fn create_rep_socket(&self) -> Option<zmq::Socket> {
@@ -94,7 +101,13 @@ impl Connector {
 
     fn create_pub_sub_proxy_thread(&self, context: zmq::Context) -> thread::JoinHandle<()>{
         thread::spawn(move || {
-            PubSubProxy::new(context).run(RELAY_PUBLISHER_PORT);
+            PubSubProxy::new(context).run();
+        })
+    }
+
+    fn create_pull_push_proxy_thread(&self, context: zmq::Context) -> thread::JoinHandle<()>{
+        thread::spawn(move || {
+            PullPushProxy::new(context).run();
         })
     }
 

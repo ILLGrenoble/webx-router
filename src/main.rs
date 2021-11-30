@@ -8,6 +8,7 @@ use env_logger::Env;
 
 mod connector;
 mod pub_sub_proxy;
+mod pull_push_proxy;
 mod process_communicator;
 
 fn main() {

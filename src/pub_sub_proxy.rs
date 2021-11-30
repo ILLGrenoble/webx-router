@@ -1,4 +1,4 @@
-use crate::process_communicator::{ProcessCommunicator, SHUTDOWN_COMMAND, ENGINE_SUBSCRIBER_ADDR};
+use crate::process_communicator::{ProcessCommunicator, SHUTDOWN_COMMAND, ENGINE_PUB_SUB_ADDR, RELAY_PUBLISHER_PORT};
 
 pub struct PubSubProxy {
     context: zmq::Context
@@ -12,10 +12,10 @@ impl PubSubProxy {
         }
     }
 
-    pub fn run(&self, port: i32) {
-        let relay_publisher_socket = self.create_relay_publisher_socket(port).unwrap();
+    pub fn run(&self) {
+        let relay_publisher_socket = self.create_relay_publisher_socket(RELAY_PUBLISHER_PORT).unwrap();
 
-        let engine_subscriber_socket = self.create_engine_subscriber_socket(ENGINE_SUBSCRIBER_ADDR).unwrap();
+        let engine_subscriber_socket = self.create_engine_subscriber_socket(ENGINE_PUB_SUB_ADDR).unwrap();
 
         let inproc_sub_socket = ProcessCommunicator::create_inproc_subscriber(&self.context).unwrap();
 
@@ -59,7 +59,7 @@ impl PubSubProxy {
             }
         }
 
-        info!("Stopped client message publisher");
+        info!("Stopped Pub-Sub Proxy");
     }
 
     fn create_relay_publisher_socket(&self, port: i32) -> Option<zmq::Socket> {
