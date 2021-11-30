@@ -7,7 +7,7 @@ extern crate log;
 use env_logger::Env;
 
 mod connector;
-mod publisher;
+mod pub_sub_proxy;
 mod process_communicator;
 
 fn main() {

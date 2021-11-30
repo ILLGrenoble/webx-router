@@ -1,10 +1,10 @@
 use crate::process_communicator::{ProcessCommunicator, SHUTDOWN_COMMAND, ENGINE_SUBSCRIBER_ADDR};
 
-pub struct Publisher {
+pub struct PubSubProxy {
     context: zmq::Context
 }
 
-impl Publisher {
+impl PubSubProxy {
 
     pub fn new(context: zmq::Context) -> Self {
         Self {

@@ -1,11 +1,6 @@
-use crate::publisher::Publisher;
-use crate::process_communicator::{ProcessCommunicator, SHUTDOWN_COMMAND};
+use crate::pub_sub_proxy::PubSubProxy;
+use crate::process_communicator::{ProcessCommunicator, SHUTDOWN_COMMAND, RELAY_CONNECTOR_PORT, RELAY_PUBLISHER_PORT, RELAY_COLLECTOR_PORT};
 use std::thread;
-
-static CONNECTOR_PORT: i32 = 5555;
-static COLLECTOR_PORT: i32 = 5556;
-static PUBLISHER_PORT: i32 = 5557;
-
 
 pub struct Connector {
     context: zmq:: Context,
@@ -21,7 +16,7 @@ impl Connector {
 
     pub fn run(&self) {
         // Create and run the publisher in separate thread
-        let publisher_thread = self.create_publisher_thread(self.context.clone());
+        let pub_sub_proxy_thread = self.create_pub_sub_proxy_thread(self.context.clone());
 
         // Create REP socket
         let rep_socket = self.create_rep_socket().unwrap();
@@ -63,7 +58,7 @@ impl Connector {
                         // Check for comm message
                         if msg.len() == 4 && message_text == "comm" {
                             // Send response
-                            if let Err(error) = rep_socket.send(format!("{},{}", PUBLISHER_PORT, COLLECTOR_PORT).as_str(), 0) {
+                            if let Err(error) = rep_socket.send(format!("{},{}", RELAY_PUBLISHER_PORT, RELAY_COLLECTOR_PORT).as_str(), 0) {
                                 error!("Failed to send comm message: {}", error);
                             }
 
@@ -82,13 +77,13 @@ impl Connector {
         info!("Stopped client connector");
 
         // Join publisher thread
-        publisher_thread.join().unwrap();
+        pub_sub_proxy_thread.join().unwrap();
     }
 
     fn create_rep_socket(&self) -> Option<zmq::Socket> {
         let socket = self.context.socket(zmq::REP).unwrap();
         socket.set_linger(0).unwrap();
-        let address = format!("tcp://*:{}", CONNECTOR_PORT);
+        let address = format!("tcp://*:{}", RELAY_CONNECTOR_PORT);
         if let Err(error) = socket.bind(address.as_str()) {
             error!("Failed to bind REP socket to {}: {}", address, error);
             return None;
@@ -97,10 +92,9 @@ impl Connector {
         Some(socket)
     }
 
-    fn create_publisher_thread(&self, context: zmq::Context) -> thread::JoinHandle<()>{
+    fn create_pub_sub_proxy_thread(&self, context: zmq::Context) -> thread::JoinHandle<()>{
         thread::spawn(move || {
-            let publisher = Publisher::new(context);
-            publisher.run(PUBLISHER_PORT);
+            PubSubProxy::new(context).run(RELAY_PUBLISHER_PORT);
         })
     }
 
