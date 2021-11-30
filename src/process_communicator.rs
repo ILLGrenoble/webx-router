@@ -1,4 +1,5 @@
 static SHUTDOWN_ADDR: &str = "inproc://shutdown";
+pub static ENGINE_SUBSCRIBER_ADDR: &str = "ipc:///tmp/webx-router.ipc";
 pub static SHUTDOWN_COMMAND: &str = "SHUTDOWN";
 
 pub struct ProcessCommunicator {

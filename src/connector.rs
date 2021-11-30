@@ -1,5 +1,5 @@
 use crate::publisher::Publisher;
-use crate::inproc_communicator::{ProcessCommunicator, SHUTDOWN_COMMAND};
+use crate::process_communicator::{ProcessCommunicator, SHUTDOWN_COMMAND};
 use std::thread;
 
 static CONNECTOR_PORT: i32 = 5555;
@@ -9,8 +9,6 @@ static PUBLISHER_PORT: i32 = 5557;
 
 pub struct Connector {
     context: zmq:: Context,
-    rep_socket: Option<zmq::Socket>,
-    inproc_sub_socket: Option<zmq::Socket>,
 }
 
 impl Connector {
@@ -18,25 +16,18 @@ impl Connector {
     pub fn new(context: zmq::Context) -> Self {
         Self {
             context: context,
-            rep_socket: None,
-            inproc_sub_socket: None,
         }
     }
 
-    pub fn init(&mut self) {
-        // Create REP socket
-        self.rep_socket = self.create_rep_socket();
-
-        // Create shutdown SUB
-        self.inproc_sub_socket = ProcessCommunicator::create_inproc_subscriber(&self.context);
-    }
-
-    pub fn run(&mut self) {
+    pub fn run(&self) {
         // Create and run the publisher in separate thread
         let publisher_thread = self.create_publisher_thread(self.context.clone());
 
-        let rep_socket = self.rep_socket.as_ref().unwrap();
-        let inproc_sub_socket = self.inproc_sub_socket.as_ref().unwrap();
+        // Create REP socket
+        let rep_socket = self.create_rep_socket().unwrap();
+
+        // Create shutdown SUB
+        let inproc_sub_socket = ProcessCommunicator::create_inproc_subscriber(&self.context).unwrap();
 
         let mut is_running = true;
         while is_running {
@@ -52,9 +43,8 @@ impl Connector {
                 // Check for shutdown message
                 if items[0].is_readable() {
                     if let Err(error) = inproc_sub_socket.recv(&mut msg, 0) {
-                        if is_running {
-                            error!("Failed to receive shutdown message: {}", error);
-                        }
+                        error!("Failed to receive shutdown message: {}", error);
+
                     } else {
                         if msg.as_str().unwrap() == SHUTDOWN_COMMAND {
                             is_running = false;
@@ -65,7 +55,7 @@ impl Connector {
                 // Check for REQ-REP message (if running)
                 if items[1].is_readable() && is_running {
                     if let Err(error) = rep_socket.recv(&mut msg, 0) {
-                        error!("Failed to received message: {}", error);
+                        error!("Failed to received message on relay req-rep: {}", error);
 
                     } else {
                         let message_text = msg.as_str().unwrap();
@@ -90,6 +80,8 @@ impl Connector {
         }
 
         info!("Stopped client connector");
+
+        // Join publisher thread
         publisher_thread.join().unwrap();
     }
 
@@ -105,11 +97,10 @@ impl Connector {
         Some(socket)
     }
 
-    fn create_publisher_thread(&mut self, context: zmq::Context) -> thread::JoinHandle<()>{
+    fn create_publisher_thread(&self, context: zmq::Context) -> thread::JoinHandle<()>{
         thread::spawn(move || {
-            let mut publisher = Publisher::new(context);
-            publisher.init();
-            publisher.run();
+            let publisher = Publisher::new(context);
+            publisher.run(PUBLISHER_PORT);
         })
     }
 

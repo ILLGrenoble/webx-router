@@ -1,5 +1,5 @@
 use crate::connector::Connector;
-use crate::inproc_communicator::{ProcessCommunicator, SHUTDOWN_COMMAND};
+use crate::process_communicator::{ProcessCommunicator, SHUTDOWN_COMMAND};
 
 #[macro_use]
 extern crate log;
@@ -8,7 +8,7 @@ use env_logger::Env;
 
 mod connector;
 mod publisher;
-mod inproc_communicator;
+mod process_communicator;
 
 fn main() {
     let env = Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info");
@@ -19,8 +19,7 @@ fn main() {
     let context = zmq::Context::new();
     create_shutdown_publisher(&context);
 
-    let mut connector = Connector::new(context);
-    connector.init();
+    let connector = Connector::new(context);
 
     info!("WebX Router running");
     connector.run();
