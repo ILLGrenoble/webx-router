@@ -1,6 +1,8 @@
 use crate::pub_sub_proxy::PubSubProxy;
 use crate::pull_push_proxy::PullPushProxy;
-use crate::process_communicator::*;
+use crate::message_bus::*;
+use crate::common::*;
+
 use std::thread;
 
 pub struct Connector {
@@ -25,34 +27,34 @@ impl Connector {
         // Create REP socket
         let rep_socket = self.create_rep_socket().unwrap();
 
-        // Create inproc SUB
-        let inproc_sub_socket = ProcessCommunicator::create_inproc_subscriber(&self.context, &[INPROC_APP_TOPIC]).unwrap();
+        // Create message bus SUB
+        let message_bus_sub_socket = MessageBus::create_message_subscriber(&self.context, &[INPROC_APP_TOPIC]).unwrap();
 
-        // Create inproc PUB
-        let inproc_pub_socket = ProcessCommunicator::create_inproc_publisher(&self.context, SocketType::CONNECT).unwrap();
+        // Create message bus PUB
+        let message_bus_pub_socket = MessageBus::create_message_publisher(&self.context).unwrap();
 
         let mut is_running = true;
         while is_running {
             let mut msg = zmq::Message::new();
 
             let mut items = [
-                inproc_sub_socket.as_poll_item(zmq::POLLIN),
+                message_bus_sub_socket.as_poll_item(zmq::POLLIN),
                 rep_socket.as_poll_item(zmq::POLLIN),
             ];
 
             // Poll both sockets
             if let Ok(_) = zmq::poll(&mut items, -1) {
-                // Check for inproc messages
+                // Check for message_bus messages
                 if items[0].is_readable() {
-                    if let Err(error) = inproc_sub_socket.recv(&mut msg, 0) {
-                        error!("Failed to receive inproc message: {}", error);
+                    if let Err(error) = message_bus_sub_socket.recv(&mut msg, 0) {
+                        error!("Failed to receive message_bus message: {}", error);
 
                     } else {
-                        let inproc_message = msg.as_str().unwrap();
-                        if inproc_message == APPLICATION_SHUTDOWN_COMMAND {
+                        let message_bus_message = msg.as_str().unwrap();
+                        if message_bus_message == APPLICATION_SHUTDOWN_COMMAND {
                             is_running = false;
                         } else {
-                            warn!("Got unknown inproc command: {}", inproc_message);
+                            warn!("Got unknown message_bus command: {}", message_bus_message);
                         }
                     }
                 }
@@ -72,9 +74,9 @@ impl Connector {
                                 error!("Failed to send comm message: {}", error);
                             }
 
-                            // Send inproc session message
-                            if let Err(error) = inproc_pub_socket.send(ENGINE_SESSION_START_COMMAND, 0) {
-                                error!("Failed to send inproc session start message: {}", error);
+                            // Send message_bus session message
+                            if let Err(error) = message_bus_pub_socket.send(ENGINE_SESSION_START_COMMAND, 0) {
+                                error!("Failed to send message_bus session start message: {}", error);
                             }
 
                         } else {

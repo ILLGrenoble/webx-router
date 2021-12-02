@@ -1,4 +1,5 @@
-use crate::process_communicator::*;
+use crate::message_bus::*;
+use crate::common::*;
 
 pub struct PubSubProxy {
     context: zmq::Context
@@ -17,31 +18,31 @@ impl PubSubProxy {
 
         let engine_subscriber_socket = self.create_engine_subscriber_socket(ENGINE_PUB_SUB_ADDR).unwrap();
 
-        let inproc_sub_socket = ProcessCommunicator::create_inproc_subscriber(&self.context, &[INPROC_APP_TOPIC]).unwrap();
+        let message_bus_sub_socket = MessageBus::create_message_subscriber(&self.context, &[INPROC_APP_TOPIC]).unwrap();
 
         let mut is_running = true;
         while is_running {
             let mut msg = zmq::Message::new();
 
             let mut items = [
-                inproc_sub_socket.as_poll_item(zmq::POLLIN),
+                message_bus_sub_socket.as_poll_item(zmq::POLLIN),
                 engine_subscriber_socket.as_poll_item(zmq::POLLIN),
             ];
 
             // Poll both sockets
             if let Ok(_) = zmq::poll(&mut items, -1) {
-                // Check for inproc messages
+                // Check for message_bus messages
                 if items[0].is_readable() {
-                    if let Err(error) = inproc_sub_socket.recv(&mut msg, 0) {
-                        error!("Failed to receive inproc message: {}", error);
+                    if let Err(error) = message_bus_sub_socket.recv(&mut msg, 0) {
+                        error!("Failed to receive message bus message: {}", error);
 
                     } else {
-                        let inproc_message = msg.as_str().unwrap();
-                        if inproc_message == APPLICATION_SHUTDOWN_COMMAND {
+                        let message_bus_message = msg.as_str().unwrap();
+                        if message_bus_message == APPLICATION_SHUTDOWN_COMMAND {
                             is_running = false;
 
                         } else {
-                            warn!("Got unknown inproc command: {}", inproc_message);
+                            warn!("Got unknown message bus command: {}", message_bus_message);
                         }
                     }
                 }
