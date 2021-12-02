@@ -1,9 +1,15 @@
+use crate::common::{Result};
+use std::process;
+
 static EVENT_BUS_SUB_ADDR: &str = "inproc://event-bus/subscriber";
 static EVENT_BUS_PUB_ADDR: &str = "inproc://event-bus/publisher";
 
-pub static INPROC_APP_TOPIC: &str = "APP";
-pub static APPLICATION_SHUTDOWN_COMMAND: &str = "APP:SHUTDOWN";
+pub static INPROC_APP_TOPIC: &str = "app";
+pub static INPROC_SESSION_TOPIC: &str = "session";
 
+pub static APPLICATION_SHUTDOWN_COMMAND: &str = "app:shutdown";
+pub static ENGINE_SESSION_START_COMMAND: &str = "session:start";
+// pub static ENGINE_SESSION_END_COMMAND: &str = "session:end";
 
 pub struct EventBus {
     context: zmq::Context
@@ -17,7 +23,7 @@ impl EventBus {
         }
     }
 
-    pub fn run(&self) {
+    pub fn run(&self) -> Result<()> {
         // Create proxy subcriber
         let xsub_socket = self.create_proxy_subscriber(&self.context).unwrap();
 
@@ -48,58 +54,61 @@ impl EventBus {
         }
 
         info!("Stopped event bus");
+
+        Ok(())
     }
 
-    fn create_proxy_subscriber(&self, context: &zmq::Context) -> Option<zmq::Socket> {
-        let socket = context.socket(zmq::SUB).unwrap();
-        socket.set_subscribe(b"").unwrap();
-        socket.set_linger(0).unwrap();
+    fn create_proxy_subscriber(&self, context: &zmq::Context) -> Result<zmq::Socket> {
+        let socket = context.socket(zmq::SUB)?;
+        socket.set_subscribe(b"")?;
+        socket.set_linger(0)?;
         if let Err(error) = socket.bind(EVENT_BUS_SUB_ADDR) {
             error!("Failed to bind event bus XSUB to {}: {}", EVENT_BUS_SUB_ADDR, error);
-            return None;
+            process::exit(1);
         }
 
-        Some(socket)
+        Ok(socket)
     }
 
-    fn create_proxy_publisher(&self, context: &zmq::Context) -> Option<zmq::Socket> {
-        let socket = context.socket(zmq::PUB).unwrap();
-        socket.set_linger(0).unwrap();
+    fn create_proxy_publisher(&self, context: &zmq::Context) -> Result<zmq::Socket> {
+        let socket = context.socket(zmq::PUB)?;
+        socket.set_linger(0)?;
         if let Err(error) = socket.bind(EVENT_BUS_PUB_ADDR) {
             error!("Failed to bind event bus XPUB to {}: {}", EVENT_BUS_PUB_ADDR, error);
-            return None;
+            process::exit(1);
         }
 
-        Some(socket)
+        Ok(socket)
     }
 
-    pub fn create_event_publisher(context: &zmq::Context) -> Option<zmq::Socket> {
-        let socket = context.socket(zmq::PUB).unwrap();
-        socket.set_linger(0).unwrap();
+    pub fn create_event_publisher(context: &zmq::Context) -> Result<zmq::Socket> {
+        let socket = context.socket(zmq::PUB)?;
+        socket.set_linger(0)?;
+
         if let Err(error) = socket.connect(EVENT_BUS_SUB_ADDR) {
             error!("Failed to connect inproc event publisher to {}: {}", EVENT_BUS_SUB_ADDR, error);
-            return None;
+            process::exit(1);
         }
 
-        Some(socket)
+        Ok(socket)
     }
 
-    pub fn create_event_subscriber(context: &zmq::Context, topics: &[&str]) -> Option<zmq::Socket> {
-        let socket = context.socket(zmq::SUB).unwrap();
+    pub fn create_event_subscriber(context: &zmq::Context, topics: &[&str]) -> Result<zmq::Socket> {
+        let socket = context.socket(zmq::SUB)?;
         if topics.is_empty() {
-            socket.set_subscribe(b"").unwrap();
+            socket.set_subscribe(b"")?;
         } else {
             for topic in topics {
-                socket.set_subscribe(topic.as_bytes()).unwrap();
+                socket.set_subscribe(topic.as_bytes())?;
             }
         }
-        socket.set_linger(0).unwrap();
+        socket.set_linger(0)?;
 
         if let Err(error) = socket.connect(EVENT_BUS_PUB_ADDR) {
             error!("Failed to connect inproc event subscriber to {}: {}", EVENT_BUS_PUB_ADDR, error);
-            return None;
+            process::exit(1);
         }
 
-        Some(socket)
+        Ok(socket)
     }    
 }

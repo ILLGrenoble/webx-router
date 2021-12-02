@@ -1,24 +1,28 @@
-use crate::utils::*;
-use crate::router::common::*;
+use crate::common::*;
+use std::process;
 
 pub struct RelayInstructionProxy {
-    context: zmq::Context
+    context: zmq::Context,
+    port: u32,
+    address: String
 }
 
 impl RelayInstructionProxy {
 
-    pub fn new(context: zmq::Context) -> Self {
+    pub fn new(context: zmq::Context, port: u32, address: String) -> Self {
         Self {
-            context: context
+            context,
+            port,
+            address
         }
     }
 
-    pub fn run(&self) {
-        let relay_pull_socket = self.create_relay_pull_socket(RELAY_COLLECTOR_PORT).unwrap();
+    pub fn run(&self) -> Result<()> {
+        let relay_pull_socket = self.create_relay_pull_socket(self.port)?;
 
-        let engine_push_socket = self.create_engine_push_socket(ENGINE_PULL_PUSH_ADDR).unwrap();
+        let engine_push_socket = self.create_engine_push_socket(&self.address)?;
 
-        let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC, INPROC_SESSION_TOPIC]).unwrap();
+        let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC, INPROC_SESSION_TOPIC])?;
 
         let mut is_running = true;
         while is_running {
@@ -68,33 +72,33 @@ impl RelayInstructionProxy {
         }
 
         info!("Stopped Relay Instruction Proxy");
+
+        Ok(())
     }
 
-    fn create_relay_pull_socket(&self, port: i32) -> Option<zmq::Socket> {
-        let socket = self.context.socket(zmq::PULL).unwrap();
-        socket.set_linger(0).unwrap();
+    fn create_relay_pull_socket(&self, port: u32) -> Result<zmq::Socket> {
+        let socket = self.context.socket(zmq::PULL)?;
+        socket.set_linger(0)?;
         let address = format!("tcp://*:{}", port);
         if let Err(error) = socket.bind(address.as_str()) {
             error!("Failed to bind PULL socket to {}: {}", address, error);
-            return None;
+            process::exit(1);
         }
-
-        Some(socket)
+        Ok(socket)
     }
 
-    fn create_engine_push_socket(&self, address: &str) -> Option<zmq::Socket> {
-        let socket = self.context.socket(zmq::PUSH).unwrap();
+    fn create_engine_push_socket(&self, address: &String) -> Result<zmq::Socket> {
+        let socket = self.context.socket(zmq::PUSH)?;
 
         // TODO: all push clients become dependent on each other: PUSH waits for delivery so one client can block the others.
         // Have to add a timeout to the send so that clients that are no longer listening do not block the router.
-        socket.set_sndtimeo(100).unwrap();
+        socket.set_sndtimeo(100)?;
         
-        socket.set_linger(0).unwrap();
+        socket.set_linger(0)?;
         if let Err(error) = socket.bind(address) {
             error!("Failed to bind engine PUSH socket to {}: {}", address, error);
-            return None;
+            process::exit(1);
         }
-
-        Some(socket)
+        Ok(socket)
     }
 }

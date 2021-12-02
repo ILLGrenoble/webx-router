@@ -1,24 +1,28 @@
-use crate::utils::*;
-use crate::router::common::*;
+use crate::common::*;
+use std::process;
 
 pub struct EngineMessageProxy {
-    context: zmq::Context
+    context: zmq::Context,
+    port: u32,
+    address: String
 }
 
 impl EngineMessageProxy {
 
-    pub fn new(context: zmq::Context) -> Self {
+    pub fn new(context: zmq::Context, port: u32, address: String) -> Self {
         Self {
-            context: context
+            context,
+            port,
+            address
         }
     }
 
-    pub fn run(&self) {
-        let relay_publisher_socket = self.create_relay_publisher_socket(RELAY_PUBLISHER_PORT).unwrap();
+    pub fn run(&self) -> Result<()> {
+        let relay_publisher_socket = self.create_relay_publisher_socket(self.port)?;
 
-        let engine_subscriber_socket = self.create_engine_subscriber_socket(ENGINE_PUB_SUB_ADDR).unwrap();
+        let engine_subscriber_socket = self.create_engine_subscriber_socket(&self.address)?;
 
-        let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC]).unwrap();
+        let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC])?;
 
         let mut is_running = true;
         while is_running {
@@ -65,30 +69,30 @@ impl EngineMessageProxy {
         }
 
         info!("Stopped Engine Message Proxy");
+
+        Ok(())
     }
 
-    fn create_relay_publisher_socket(&self, port: i32) -> Option<zmq::Socket> {
-        let socket = self.context.socket(zmq::PUB).unwrap();
-        socket.set_linger(0).unwrap();
+    fn create_relay_publisher_socket(&self, port: u32) -> Result<zmq::Socket> {
+        let socket = self.context.socket(zmq::PUB)?;
+        socket.set_linger(0)?;
         let address = format!("tcp://*:{}", port);
         if let Err(error) = socket.bind(address.as_str()) {
             error!("Failed to bind PUB socket to {}: {}", address, error);
-            return None;
+            process::exit(1);
         }
-
-        Some(socket)
+        Ok(socket)
     }
 
-    fn create_engine_subscriber_socket(&self, address: &str) -> Option<zmq::Socket> {
-        let socket = self.context.socket(zmq::SUB).unwrap();
+    fn create_engine_subscriber_socket(&self, address: &String) -> Result<zmq::Socket> {
+        let socket = self.context.socket(zmq::SUB)?;
         // Listen on all topics
-        socket.set_subscribe(b"").unwrap();
-        socket.set_linger(0).unwrap();
+        socket.set_subscribe(b"")?;
+        socket.set_linger(0)?;
         if let Err(error) = socket.bind(address) {
             error!("Failed to bind engine SUB socket to {}: {}", address, error);
-            return None;
+            process::exit(1);
         }
-
-        Some(socket)
+        Ok(socket)
     }
 }
