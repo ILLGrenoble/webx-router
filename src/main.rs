@@ -1,5 +1,5 @@
 use crate::connector::Connector;
-use crate::process_communicator::{ProcessCommunicator, SHUTDOWN_COMMAND};
+use crate::process_communicator::{ProcessCommunicator, APPLICATION_SHUTDOWN_COMMAND, SocketType};
 
 #[macro_use]
 extern crate log;
@@ -29,10 +29,10 @@ fn main() {
 }
 
 fn create_shutdown_publisher(context: &zmq::Context) {
-    let socket = ProcessCommunicator::create_inproc_publisher(context).unwrap();
+    let socket = ProcessCommunicator::create_inproc_publisher(context, SocketType::BIND).unwrap();
     ctrlc::set_handler(move || {
         info!("Sending shutdown command");
-        socket.send(SHUTDOWN_COMMAND, 0).unwrap();
+        socket.send(APPLICATION_SHUTDOWN_COMMAND, 0).unwrap();
 
     }).expect("Error setting Ctrl-C handler");
 }

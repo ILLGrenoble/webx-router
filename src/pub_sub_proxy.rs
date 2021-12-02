@@ -1,4 +1,4 @@
-use crate::process_communicator::{ProcessCommunicator, SHUTDOWN_COMMAND, ENGINE_PUB_SUB_ADDR, RELAY_PUBLISHER_PORT};
+use crate::process_communicator::*;
 
 pub struct PubSubProxy {
     context: zmq::Context
@@ -17,7 +17,7 @@ impl PubSubProxy {
 
         let engine_subscriber_socket = self.create_engine_subscriber_socket(ENGINE_PUB_SUB_ADDR).unwrap();
 
-        let inproc_sub_socket = ProcessCommunicator::create_inproc_subscriber(&self.context).unwrap();
+        let inproc_sub_socket = ProcessCommunicator::create_inproc_subscriber(&self.context, &[INPROC_APP_TOPIC]).unwrap();
 
         let mut is_running = true;
         while is_running {
@@ -30,14 +30,18 @@ impl PubSubProxy {
 
             // Poll both sockets
             if let Ok(_) = zmq::poll(&mut items, -1) {
-                // Check for shutdown message
+                // Check for inproc messages
                 if items[0].is_readable() {
                     if let Err(error) = inproc_sub_socket.recv(&mut msg, 0) {
-                        error!("Failed to receive shutdown message: {}", error);
+                        error!("Failed to receive inproc message: {}", error);
 
                     } else {
-                        if msg.as_str().unwrap() == SHUTDOWN_COMMAND {
+                        let inproc_message = msg.as_str().unwrap();
+                        if inproc_message == APPLICATION_SHUTDOWN_COMMAND {
                             is_running = false;
+
+                        } else {
+                            warn!("Got unknown inproc command: {}", inproc_message);
                         }
                     }
                 }

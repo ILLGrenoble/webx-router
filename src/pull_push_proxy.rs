@@ -1,4 +1,4 @@
-use crate::process_communicator::{ProcessCommunicator, SHUTDOWN_COMMAND, ENGINE_PULL_PUSH_ADDR, RELAY_COLLECTOR_PORT};
+use crate::process_communicator::*;
 
 pub struct PullPushProxy {
     context: zmq::Context
@@ -17,7 +17,7 @@ impl PullPushProxy {
 
         let engine_push_socket = self.create_engine_push_socket(ENGINE_PULL_PUSH_ADDR).unwrap();
 
-        let inproc_sub_socket = ProcessCommunicator::create_inproc_subscriber(&self.context).unwrap();
+        let inproc_sub_socket = ProcessCommunicator::create_inproc_subscriber(&self.context, &[]).unwrap();
 
         let mut is_running = true;
         while is_running {
@@ -30,14 +30,21 @@ impl PullPushProxy {
 
             // Poll both sockets
             if let Ok(_) = zmq::poll(&mut items, -1) {
-                // Check for shutdown message
+                // Check for inproc messages
                 if items[0].is_readable() {
                     if let Err(error) = inproc_sub_socket.recv(&mut msg, 0) {
-                        error!("Failed to receive shutdown message: {}", error);
+                        error!("Failed to receive inproc message: {}", error);
 
                     } else {
-                        if msg.as_str().unwrap() == SHUTDOWN_COMMAND {
+                        let inproc_message = msg.as_str().unwrap();
+                        if inproc_message == APPLICATION_SHUTDOWN_COMMAND {
                             is_running = false;
+
+                        } else if inproc_message.starts_with(INPROC_SESSION_TOPIC) {
+                            warn!("Got inproc session command: {}", inproc_message);
+
+                        } else {
+                            warn!("Got unknown inproc command: {}", inproc_message);
                         }
                     }
                 }

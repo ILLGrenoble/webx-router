@@ -1,6 +1,6 @@
 use crate::pub_sub_proxy::PubSubProxy;
 use crate::pull_push_proxy::PullPushProxy;
-use crate::process_communicator::{ProcessCommunicator, SHUTDOWN_COMMAND, RELAY_CONNECTOR_PORT, RELAY_PUBLISHER_PORT, RELAY_COLLECTOR_PORT};
+use crate::process_communicator::*;
 use std::thread;
 
 pub struct Connector {
@@ -25,8 +25,11 @@ impl Connector {
         // Create REP socket
         let rep_socket = self.create_rep_socket().unwrap();
 
-        // Create shutdown SUB
-        let inproc_sub_socket = ProcessCommunicator::create_inproc_subscriber(&self.context).unwrap();
+        // Create inproc SUB
+        let inproc_sub_socket = ProcessCommunicator::create_inproc_subscriber(&self.context, &[INPROC_APP_TOPIC]).unwrap();
+
+        // Create inproc PUB
+        let inproc_pub_socket = ProcessCommunicator::create_inproc_publisher(&self.context, SocketType::CONNECT).unwrap();
 
         let mut is_running = true;
         while is_running {
@@ -39,14 +42,17 @@ impl Connector {
 
             // Poll both sockets
             if let Ok(_) = zmq::poll(&mut items, -1) {
-                // Check for shutdown message
+                // Check for inproc messages
                 if items[0].is_readable() {
                     if let Err(error) = inproc_sub_socket.recv(&mut msg, 0) {
-                        error!("Failed to receive shutdown message: {}", error);
+                        error!("Failed to receive inproc message: {}", error);
 
                     } else {
-                        if msg.as_str().unwrap() == SHUTDOWN_COMMAND {
+                        let inproc_message = msg.as_str().unwrap();
+                        if inproc_message == APPLICATION_SHUTDOWN_COMMAND {
                             is_running = false;
+                        } else {
+                            warn!("Got unknown inproc command: {}", inproc_message);
                         }
                     }
                 }
@@ -64,6 +70,11 @@ impl Connector {
                             // Send response
                             if let Err(error) = rep_socket.send(format!("{},{}", RELAY_PUBLISHER_PORT, RELAY_COLLECTOR_PORT).as_str(), 0) {
                                 error!("Failed to send comm message: {}", error);
+                            }
+
+                            // Send inproc session message
+                            if let Err(error) = inproc_pub_socket.send(ENGINE_SESSION_START_COMMAND, 0) {
+                                error!("Failed to send inproc session start message: {}", error);
                             }
 
                         } else {
