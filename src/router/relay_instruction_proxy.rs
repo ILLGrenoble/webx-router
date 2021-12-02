@@ -1,11 +1,11 @@
-use crate::message_bus::*;
-use crate::common::*;
+use crate::utils::*;
+use crate::router::common::*;
 
-pub struct PullPushProxy {
+pub struct RelayInstructionProxy {
     context: zmq::Context
 }
 
-impl PullPushProxy {
+impl RelayInstructionProxy {
 
     pub fn new(context: zmq::Context) -> Self {
         Self {
@@ -18,14 +18,14 @@ impl PullPushProxy {
 
         let engine_push_socket = self.create_engine_push_socket(ENGINE_PULL_PUSH_ADDR).unwrap();
 
-        let message_bus_sub_socket = MessageBus::create_message_subscriber(&self.context, &[INPROC_APP_TOPIC, INPROC_SESSION_TOPIC]).unwrap();
+        let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC, INPROC_SESSION_TOPIC]).unwrap();
 
         let mut is_running = true;
         while is_running {
             let mut msg = zmq::Message::new();
 
             let mut items = [
-                message_bus_sub_socket.as_poll_item(zmq::POLLIN),
+                event_bus_sub_socket.as_poll_item(zmq::POLLIN),
                 relay_pull_socket.as_poll_item(zmq::POLLIN),
             ];
 
@@ -33,19 +33,19 @@ impl PullPushProxy {
             if let Ok(_) = zmq::poll(&mut items, -1) {
                 // Check for message_bus messages
                 if items[0].is_readable() {
-                    if let Err(error) = message_bus_sub_socket.recv(&mut msg, 0) {
-                        error!("Failed to receive message_bus message: {}", error);
+                    if let Err(error) = event_bus_sub_socket.recv(&mut msg, 0) {
+                        error!("Failed to receive event bus message: {}", error);
 
                     } else {
-                        let message_bus_message = msg.as_str().unwrap();
-                        if message_bus_message == APPLICATION_SHUTDOWN_COMMAND {
+                        let event = msg.as_str().unwrap();
+                        if event == APPLICATION_SHUTDOWN_COMMAND {
                             is_running = false;
 
-                        } else if message_bus_message.starts_with(INPROC_SESSION_TOPIC) {
-                            info!("Got message bus session command: {}", message_bus_message);
+                        } else if event.starts_with(INPROC_SESSION_TOPIC) {
+                            info!("Got event bus session command: {}", event);
 
                         } else {
-                            warn!("Got unknown message bus command: {}", message_bus_message);
+                            warn!("Got unknown event bus command: {}", event);
                         }
                     }
                 }
@@ -67,7 +67,7 @@ impl PullPushProxy {
             }
         }
 
-        info!("Stopped Pull-Push Proxy");
+        info!("Stopped Relay Instruction Proxy");
     }
 
     fn create_relay_pull_socket(&self, port: i32) -> Option<zmq::Socket> {

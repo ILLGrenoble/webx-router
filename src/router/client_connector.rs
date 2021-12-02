@@ -1,15 +1,14 @@
-use crate::pub_sub_proxy::PubSubProxy;
-use crate::pull_push_proxy::PullPushProxy;
-use crate::message_bus::*;
-use crate::common::*;
+use crate::router::{EngineMessageProxy, RelayInstructionProxy};
+use crate::router::common::*;
+use crate::utils::*;
 
 use std::thread;
 
-pub struct Connector {
+pub struct ClientConnector {
     context: zmq:: Context,
 }
 
-impl Connector {
+impl ClientConnector {
 
     pub fn new(context: zmq::Context) -> Self {
         Self {
@@ -18,43 +17,43 @@ impl Connector {
     }
 
     pub fn run(&self) {
-        // Create and run the pub-sub proxy in separate thread
-        let pub_sub_proxy_thread = self.create_pub_sub_proxy_thread(self.context.clone());
+        // Create and run the engine message proxy in separate thread
+        let engine_message_proxy_thread = self.create_engine_message_proxy_thread(self.context.clone());
 
-        // Create and run the pull-push proxy in separate thread
-        let pull_push_proxy_thread = self.create_pull_push_proxy_thread(self.context.clone());
+        // Create and run the relay instruction proxy in separate thread
+        let relay_instruction_proxy_thread = self.create_relay_instruction_proxy_thread(self.context.clone());
 
         // Create REP socket
         let rep_socket = self.create_rep_socket().unwrap();
 
-        // Create message bus SUB
-        let message_bus_sub_socket = MessageBus::create_message_subscriber(&self.context, &[INPROC_APP_TOPIC]).unwrap();
+        // Create event bus SUB
+        let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC]).unwrap();
 
-        // Create message bus PUB
-        let message_bus_pub_socket = MessageBus::create_message_publisher(&self.context).unwrap();
+        // Create event bus PUB
+        let event_bus_pub_socket = EventBus::create_event_publisher(&self.context).unwrap();
 
         let mut is_running = true;
         while is_running {
             let mut msg = zmq::Message::new();
 
             let mut items = [
-                message_bus_sub_socket.as_poll_item(zmq::POLLIN),
+                event_bus_sub_socket.as_poll_item(zmq::POLLIN),
                 rep_socket.as_poll_item(zmq::POLLIN),
             ];
 
             // Poll both sockets
             if let Ok(_) = zmq::poll(&mut items, -1) {
-                // Check for message_bus messages
+                // Check for event bus messages
                 if items[0].is_readable() {
-                    if let Err(error) = message_bus_sub_socket.recv(&mut msg, 0) {
-                        error!("Failed to receive message_bus message: {}", error);
+                    if let Err(error) = event_bus_sub_socket.recv(&mut msg, 0) {
+                        error!("Failed to receive event bus message: {}", error);
 
                     } else {
-                        let message_bus_message = msg.as_str().unwrap();
-                        if message_bus_message == APPLICATION_SHUTDOWN_COMMAND {
+                        let event = msg.as_str().unwrap();
+                        if event == APPLICATION_SHUTDOWN_COMMAND {
                             is_running = false;
                         } else {
-                            warn!("Got unknown message_bus command: {}", message_bus_message);
+                            warn!("Got unknown event bus message: {}", event);
                         }
                     }
                 }
@@ -74,9 +73,9 @@ impl Connector {
                                 error!("Failed to send comm message: {}", error);
                             }
 
-                            // Send message_bus session message
-                            if let Err(error) = message_bus_pub_socket.send(ENGINE_SESSION_START_COMMAND, 0) {
-                                error!("Failed to send message_bus session start message: {}", error);
+                            // Send event bus session message
+                            if let Err(error) = event_bus_pub_socket.send(ENGINE_SESSION_START_COMMAND, 0) {
+                                error!("Failed to send event bus session start message: {}", error);
                             }
 
                         } else {
@@ -91,13 +90,13 @@ impl Connector {
             }
         }
 
-        info!("Stopped client connector");
+        info!("Stopped Client Connector");
 
-        // Join pub-sub proxy thread
-        pub_sub_proxy_thread.join().unwrap();
+        // Join engine message proxy thread
+        engine_message_proxy_thread.join().unwrap();
 
-        // Join pull-push proxy thread
-        pull_push_proxy_thread.join().unwrap();
+        // Join relay instruction proxy thread
+        relay_instruction_proxy_thread.join().unwrap();
     }
 
     fn create_rep_socket(&self) -> Option<zmq::Socket> {
@@ -112,15 +111,15 @@ impl Connector {
         Some(socket)
     }
 
-    fn create_pub_sub_proxy_thread(&self, context: zmq::Context) -> thread::JoinHandle<()>{
+    fn create_engine_message_proxy_thread(&self, context: zmq::Context) -> thread::JoinHandle<()>{
         thread::spawn(move || {
-            PubSubProxy::new(context).run();
+            EngineMessageProxy::new(context).run();
         })
     }
 
-    fn create_pull_push_proxy_thread(&self, context: zmq::Context) -> thread::JoinHandle<()>{
+    fn create_relay_instruction_proxy_thread(&self, context: zmq::Context) -> thread::JoinHandle<()>{
         thread::spawn(move || {
-            PullPushProxy::new(context).run();
+            RelayInstructionProxy::new(context).run();
         })
     }
 

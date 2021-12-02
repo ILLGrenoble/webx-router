@@ -1,11 +1,11 @@
-use crate::message_bus::*;
-use crate::common::*;
+use crate::utils::*;
+use crate::router::common::*;
 
-pub struct PubSubProxy {
+pub struct EngineMessageProxy {
     context: zmq::Context
 }
 
-impl PubSubProxy {
+impl EngineMessageProxy {
 
     pub fn new(context: zmq::Context) -> Self {
         Self {
@@ -18,31 +18,31 @@ impl PubSubProxy {
 
         let engine_subscriber_socket = self.create_engine_subscriber_socket(ENGINE_PUB_SUB_ADDR).unwrap();
 
-        let message_bus_sub_socket = MessageBus::create_message_subscriber(&self.context, &[INPROC_APP_TOPIC]).unwrap();
+        let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC]).unwrap();
 
         let mut is_running = true;
         while is_running {
             let mut msg = zmq::Message::new();
 
             let mut items = [
-                message_bus_sub_socket.as_poll_item(zmq::POLLIN),
+                event_bus_sub_socket.as_poll_item(zmq::POLLIN),
                 engine_subscriber_socket.as_poll_item(zmq::POLLIN),
             ];
 
             // Poll both sockets
             if let Ok(_) = zmq::poll(&mut items, -1) {
-                // Check for message_bus messages
+                // Check for event bus messages
                 if items[0].is_readable() {
-                    if let Err(error) = message_bus_sub_socket.recv(&mut msg, 0) {
-                        error!("Failed to receive message bus message: {}", error);
+                    if let Err(error) = event_bus_sub_socket.recv(&mut msg, 0) {
+                        error!("Failed to receive event bus message: {}", error);
 
                     } else {
-                        let message_bus_message = msg.as_str().unwrap();
-                        if message_bus_message == APPLICATION_SHUTDOWN_COMMAND {
+                        let event = msg.as_str().unwrap();
+                        if event == APPLICATION_SHUTDOWN_COMMAND {
                             is_running = false;
 
                         } else {
-                            warn!("Got unknown message bus command: {}", message_bus_message);
+                            warn!("Got unknown event bus command: {}", event);
                         }
                     }
                 }
@@ -51,20 +51,20 @@ impl PubSubProxy {
                 if items[1].is_readable() && is_running {
                     // Get message on subscriber socket
                     if let Err(error) = engine_subscriber_socket.recv(&mut msg, 0) {
-                        error!("Failed to received message on engine subscriber: {}", error);
+                        error!("Failed to received message from engine message publisher: {}", error);
 
                     } else {
                         debug!("Got message from engine of length {}", msg.len());
                         // Resend message on publisher socket
                         if let Err(error) = relay_publisher_socket.send(msg, 0) {
-                            error!("Failed to send message on relay publisher: {}", error);
+                            error!("Failed to send message to relay message subscriber: {}", error);
                         }   
                     }
                 }
             }
         }
 
-        info!("Stopped Pub-Sub Proxy");
+        info!("Stopped Engine Message Proxy");
     }
 
     fn create_relay_publisher_socket(&self, port: i32) -> Option<zmq::Socket> {
