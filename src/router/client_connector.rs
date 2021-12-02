@@ -3,7 +3,7 @@ use crate::common::*;
 
 use std::thread;
 
-static RELAY_CONNECTOR_PORT: u32 = 5559;
+static RELAY_CONNECTOR_PORT: u32 = 5555;
 static RELAY_PUBLISHER_PORT: u32 = 5557;
 static RELAY_COLLECTOR_PORT: u32 = 5556;
 
