@@ -5,11 +5,8 @@ static EVENT_BUS_SUB_ADDR: &str = "inproc://event-bus/subscriber";
 static EVENT_BUS_PUB_ADDR: &str = "inproc://event-bus/publisher";
 
 pub static INPROC_APP_TOPIC: &str = "app";
-pub static INPROC_SESSION_TOPIC: &str = "session";
 
 pub static APPLICATION_SHUTDOWN_COMMAND: &str = "app:shutdown";
-pub static ENGINE_SESSION_START_COMMAND: &str = "session:start";
-// pub static ENGINE_SESSION_END_COMMAND: &str = "session:end";
 
 pub struct EventBus {
     context: zmq::Context

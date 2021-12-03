@@ -18,7 +18,7 @@ impl Application {
         let context = zmq::Context::new();
     
         // Create event bus
-        let event_bus_thread = self.create_message_bus_thread(context.clone());
+        let event_bus_thread = self.create_event_bus_thread(context.clone());
     
         // Create CTRL-C shutdown publisher
         self.create_shutdown_publisher(&context);
@@ -30,15 +30,17 @@ impl Application {
         connector.run()?;
     
         // Join event bus thread
-        event_bus_thread.join().unwrap()?;
+        event_bus_thread.join().unwrap();
     
         info!("WebX Router terminated");
         Ok(())
     }
     
-    fn create_message_bus_thread(&self, context: zmq::Context) -> thread::JoinHandle<Result<()>> {
-        thread::spawn(move || -> Result<()> {
-            EventBus::new(context).run()
+    fn create_event_bus_thread(&self, context: zmq::Context) -> thread::JoinHandle<()> {
+        thread::spawn(move ||  {
+            if let Err(error) = EventBus::new(context).run() {
+                error!("Event Bus thread error: {}", error);
+            }
         })
     }
     
