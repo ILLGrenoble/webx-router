@@ -79,10 +79,15 @@ impl RelayInstructionProxy {
         socket.set_subscribe(b"")?;
         socket.set_linger(0)?;
         let address = format!("tcp://*:{}", port);
-        if let Err(error) = socket.bind(address.as_str()) {
-            error!("Failed to bind relay SUB socket to {}: {}", address, error);
-            process::exit(1);
+
+        match socket.bind(address.as_str()) {
+            Ok(_) => info!("Instruction Proxy bound to {}", address),
+            Err(error) => {
+                error!("Failed to bind relay SUB socket to {}: {}", address, error);
+                process::exit(1);
+            }
         }
+
         Ok(socket)
     }
 

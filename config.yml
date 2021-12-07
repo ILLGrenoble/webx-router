@@ -1,0 +1,12 @@
+logging: debug
+transport:
+  ports:
+    connector: 5555
+    publisher: 5556
+    collector: 5557
+  ipc:
+    message_proxy: "ipc:///tmp/webx-router-message-proxy.ipc"
+    instruction_proxy: "ipc:///tmp/webx-router-instruction-proxy.ipc"
+  encryption:
+    public: ""
+    private: ""

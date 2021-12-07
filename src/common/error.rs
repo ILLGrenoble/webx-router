@@ -8,6 +8,7 @@ pub type Result<T> = result::Result<T, RouterError>;
 pub enum RouterError {
     Transport(String),
     IoError(std::io::Error),
+    ConfigError(config::ConfigError),
 }
 
 impl Error for RouterError {}
@@ -18,6 +19,9 @@ impl fmt::Display for RouterError {
             RouterError::Transport(message) =>write!(formatter, "{}", message),
             RouterError::IoError(err) => {
                 writeln!(formatter, "IoError: {}", err)
+            },
+            RouterError::ConfigError(err) => {
+                writeln!(formatter, "ConfigError: {}", err)
             },
         }
     }
@@ -32,5 +36,11 @@ impl From<zmq::Error> for RouterError {
 impl From<std::io::Error> for RouterError {
     fn from(err: std::io::Error) -> Self {
         RouterError::IoError(err)
+    }
+}
+
+impl From<config::ConfigError> for RouterError {
+    fn from(err: config::ConfigError) -> Self {
+        RouterError::ConfigError(err)
     }
 }

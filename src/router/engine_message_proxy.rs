@@ -77,10 +77,14 @@ impl EngineMessageProxy {
         let socket = self.context.socket(zmq::PUB)?;
         socket.set_linger(0)?;
         let address = format!("tcp://*:{}", port);
-        if let Err(error) = socket.bind(address.as_str()) {
-            error!("Failed to bind PUB socket to {}: {}", address, error);
-            process::exit(1);
+        match socket.bind(address.as_str()) {
+            Ok(_) => info!("Message Proxy bound to {}", address),
+            Err(error) => {
+                error!("Failed to bind PUB socket to {}: {}", address, error);
+                process::exit(1);
+            }
         }
+
         Ok(socket)
     }
 
