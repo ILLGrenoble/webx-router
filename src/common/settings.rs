@@ -5,6 +5,7 @@ pub struct PortSettings {
     pub connector: u32,
     pub publisher: u32,
     pub collector: u32,
+    pub session: u32,
 }
 
 #[derive(Debug, Deserialize, Clone)]

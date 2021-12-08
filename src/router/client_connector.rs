@@ -1,7 +1,4 @@
-use crate::router::{EngineMessageProxy, RelayInstructionProxy};
 use crate::common::*;
-
-use std::thread;
 
 pub struct ClientConnector {
     context: zmq:: Context,
@@ -11,19 +8,13 @@ impl ClientConnector {
 
     pub fn new(context: zmq::Context) -> Self {
         Self {
-            context: context,
+            context,
         }
     }
 
     pub fn run(&self, settings: &TransportSettings) -> Result<()> {
-        // Create and run the engine message proxy in separate thread
-        let engine_message_proxy_thread = self.create_engine_message_proxy_thread(self.context.clone(), settings);
-
-        // Create and run the relay instruction proxy in separate thread
-        let relay_instruction_proxy_thread = self.create_relay_instruction_proxy_thread(self.context.clone(), settings);
-
         // Create REP socket
-        let rep_socket = self.create_rep_socket(settings)?;
+        let rep_socket = self.create_rep_socket(settings.ports.connector)?;
 
         // Create event bus SUB
         let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC])?;
@@ -65,7 +56,11 @@ impl ClientConnector {
                         // Check for comm message
                         if msg.len() == 4 && message_text == "comm" {
                             // Send response
-                            if let Err(error) = rep_socket.send(format!("{},{}", settings.ports.publisher, settings.ports.collector).as_str(), 0) {
+                            if let Err(error) = rep_socket.send(format!("{},{},{},{}", 
+                                settings.ports.publisher, 
+                                settings.ports.collector,
+                                settings.ports.session,
+                                settings.encryption.public).as_str(), 0) {
                                 error!("Failed to send comm message: {}", error);
                             }
 
@@ -83,48 +78,20 @@ impl ClientConnector {
 
         info!("Stopped Client Connector");
 
-        // Join engine message proxy thread
-        engine_message_proxy_thread.join().unwrap();
-
-        // Join relay instruction proxy thread
-        relay_instruction_proxy_thread.join().unwrap();
-
         Ok(())
     }
 
-    fn create_rep_socket(&self, settings: &TransportSettings) -> Result<zmq::Socket> {
+    fn create_rep_socket(&self, port: u32) -> Result<zmq::Socket> {
         let socket = self.context.socket(zmq::REP)?;
         socket.set_linger(0)?;
 
-        let address = format!("tcp://*:{}", settings.ports.connector);
+        let address = format!("tcp://*:{}", port);
         match socket.bind(address.as_str()) {
             Ok(_) => info!("Client Connector bound to {}", address),
             Err(error) => return Err(RouterError::Transport(format!("Failed to bind REP socket to {}: {}", address, error)))
         }
 
         Ok(socket)
-    }
-
-    fn create_engine_message_proxy_thread(&self, context: zmq::Context, settings: &TransportSettings) -> thread::JoinHandle<()>{
-        thread::spawn({
-            let publisher_port = settings.ports.publisher;
-            let message_proxy_addr = settings.ipc.message_proxy.clone();
-            move || {
-            if let Err(error) = EngineMessageProxy::new(context, publisher_port, message_proxy_addr).run() {
-                error!("Engine Message Proxy thread error: {}", error);
-            }
-        }})
-    }
-
-    fn create_relay_instruction_proxy_thread(&self, context: zmq::Context, settings: &TransportSettings) -> thread::JoinHandle<()>{
-        thread::spawn({
-            let collector_port = settings.ports.collector;
-            let instruction_proxy_addr = settings.ipc.instruction_proxy.clone();
-            move || {
-            if let Err(error) = RelayInstructionProxy::new(context, collector_port, instruction_proxy_addr).run() {
-                error!("Relay Instruction Proxy thread error: {}", error);
-            }
-        }})
     }
 
 }

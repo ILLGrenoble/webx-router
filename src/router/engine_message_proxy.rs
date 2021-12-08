@@ -3,24 +3,20 @@ use std::process;
 
 pub struct EngineMessageProxy {
     context: zmq::Context,
-    port: u32,
-    address: String
 }
 
 impl EngineMessageProxy {
 
-    pub fn new(context: zmq::Context, port: u32, address: String) -> Self {
+    pub fn new(context: zmq::Context) -> Self {
         Self {
             context,
-            port,
-            address
         }
     }
 
-    pub fn run(&self) -> Result<()> {
-        let relay_publisher_socket = self.create_relay_publisher_socket(self.port)?;
+    pub fn run(&self, settings: &TransportSettings) -> Result<()> {
+        let relay_publisher_socket = self.create_relay_publisher_socket(settings.ports.publisher)?;
 
-        let engine_subscriber_socket = self.create_engine_subscriber_socket(&self.address)?;
+        let engine_subscriber_socket = self.create_engine_subscriber_socket(&settings.ipc.message_proxy)?;
 
         let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC])?;
 

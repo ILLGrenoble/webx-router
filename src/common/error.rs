@@ -33,6 +33,12 @@ impl From<zmq::Error> for RouterError {
     }
 }
 
+impl From<zmq::DecodeError> for RouterError {
+    fn from(err: zmq::DecodeError) -> Self {
+        RouterError::Transport(err.to_string())
+    }
+}
+
 impl From<std::io::Error> for RouterError {
     fn from(err: std::io::Error) -> Self {
         RouterError::IoError(err)

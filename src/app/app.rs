@@ -1,5 +1,5 @@
 use crate::common::{Settings, EventBus, APPLICATION_SHUTDOWN_COMMAND, Result};
-use crate::router::ClientConnector;
+use crate::router::Transport;
 
 use std::thread;
 
@@ -12,7 +12,7 @@ impl Application {
         }
     }
 
-    pub fn run(&self, settings: Settings) -> Result<()> {
+    pub fn run(&self, settings: &mut Settings) -> Result<()> {
         info!("Starting WebX Router...");
 
         // Create ZMQ context
@@ -24,11 +24,11 @@ impl Application {
         // Create CTRL-C shutdown publisher
         self.create_shutdown_publisher(&context);
     
-        // Create client connector
-        let connector = ClientConnector::new(context);
+        // Create transport
+        let transport = Transport::new(context);
     
         info!("WebX Router running");
-        connector.run(&settings.transport)?;
+        transport.run(&mut settings.transport)?;
     
         // Join event bus thread
         event_bus_thread.join().unwrap();
