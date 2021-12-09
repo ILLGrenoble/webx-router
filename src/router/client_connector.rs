@@ -53,15 +53,20 @@ impl ClientConnector {
                     } else {
                         let message_text = msg.as_str().unwrap();
 
-                        // Check for comm message
-                        if msg.len() == 4 && message_text == "comm" {
-                            // Send response
+                        if message_text == "comm" {
+                            // Comm message
                             if let Err(error) = rep_socket.send(format!("{},{},{},{}", 
                                 settings.ports.publisher, 
                                 settings.ports.collector,
                                 settings.ports.session,
                                 settings.encryption.public).as_str(), 0) {
                                 error!("Failed to send comm message: {}", error);
+                            }
+
+                        } else if message_text == "ping" {
+                            // Ping response
+                            if let Err(error) = rep_socket.send("pong", 0) {
+                                error!("Failed to send pong message: {}", error);
                             }
 
                         } else {

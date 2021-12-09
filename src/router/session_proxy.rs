@@ -55,24 +55,35 @@ impl SessionProxy {
 
                     } else {
                         // Decode message
-                        let session_request = msg.as_str().unwrap();
-                        let session_parameters = session_request.split(",").collect::<Vec<&str>>();
-                        if session_parameters[0] == "create" {
-                            if session_parameters.len() == 3 {
-                                let username = session_parameters[1];
-                                let password = session_parameters[2];
-                                info!("Got session create command with username \"{}\" and password \"{}\"", username, password);
-                                if let Err(error) = secure_rep_socket.send("123456789ABCDEF", 0) {
-                                    error!("Failed to send session create response: {}", error);
-                                }
-                                send_empty = false;
+                        let message_text = msg.as_str().unwrap();
 
-                            } else {
-                                error!("Got incorrect number of session create parameters. Got {}, expected 3", session_parameters.len());
+
+                        if message_text == "ping" {
+                            // Ping response
+                            if let Err(error) = secure_rep_socket.send("pong", 0) {
+                                error!("Failed to send pong message: {}", error);
                             }
+                            send_empty = false;
 
                         } else {
-                            error!("Got unknown session command");
+                            let session_parameters = message_text.split(",").collect::<Vec<&str>>();
+                            if session_parameters[0] == "create" {
+                                if session_parameters.len() == 3 {
+                                    let username = session_parameters[1];
+                                    let password = session_parameters[2];
+                                    info!("Got session create command with username \"{}\" and password \"{}\"", username, password);
+                                    if let Err(error) = secure_rep_socket.send("123456789ABCDEF", 0) {
+                                        error!("Failed to send session create response: {}", error);
+                                    }
+                                    send_empty = false;
+    
+                                } else {
+                                    error!("Got incorrect number of session create parameters. Got {}, expected 3", session_parameters.len());
+                                }
+    
+                            } else {
+                                error!("Got unknown session command");
+                            }
                         }
 
                         if send_empty {
