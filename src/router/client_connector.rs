@@ -12,9 +12,11 @@ impl ClientConnector {
         }
     }
 
-    pub fn run(&self, settings: &TransportSettings) -> Result<()> {
+    pub fn run(&self, settings: &Settings) -> Result<()> {
+        let transport = &settings.transport;
+
         // Create REP socket
-        let rep_socket = self.create_rep_socket(settings.ports.connector)?;
+        let rep_socket = self.create_rep_socket(transport.ports.connector)?;
 
         // Create event bus SUB
         let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC])?;
@@ -56,11 +58,11 @@ impl ClientConnector {
                         if message_text == "comm" {
                             // Comm message
                             if let Err(error) = rep_socket.send(format!("{},{},{},{}", 
-                                settings.ports.publisher, 
-                                settings.ports.collector,
-                                settings.ports.session,
-                                settings.encryption.public).as_str(), 0) {
-                                error!("Failed to send comm message: {}", error);
+                                transport.ports.publisher, 
+                                transport.ports.collector,
+                                transport.ports.session,
+                                transport.encryption.public).as_str(), 0) {
+                                    error!("Failed to send comm message: {}", error);
                             }
 
                         } else if message_text == "ping" {
@@ -93,7 +95,7 @@ impl ClientConnector {
         let address = format!("tcp://*:{}", port);
         match socket.bind(address.as_str()) {
             Ok(_) => info!("Client Connector bound to {}", address),
-            Err(error) => return Err(RouterError::Transport(format!("Failed to bind REP socket to {}: {}", address, error)))
+            Err(error) => return Err(RouterError::TransportError(format!("Failed to bind REP socket to {}: {}", address, error)))
         }
 
         Ok(socket)

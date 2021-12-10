@@ -28,9 +28,15 @@ pub struct TransportSettings {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct EngineSettings {
+    pub path: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Settings {
     pub logging: String,
     pub transport: TransportSettings,
+    pub engine: EngineSettings
 }
 
 impl Settings {

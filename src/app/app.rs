@@ -28,7 +28,7 @@ impl Application {
         let transport = Transport::new(context);
     
         info!("WebX Router running");
-        transport.run(&mut settings.transport)?;
+        transport.run(settings)?;
     
         // Join event bus thread
         event_bus_thread.join().unwrap();

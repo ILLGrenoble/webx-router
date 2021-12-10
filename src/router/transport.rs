@@ -15,16 +15,18 @@ impl Transport {
         }
     }
 
-    pub fn run(&self, settings: &mut TransportSettings) -> Result<()> {
+    pub fn run(&self, settings: &mut Settings) -> Result<()> {
+        let transport = &mut settings.transport;
+
         // Check for public/private keys in settings
-        if settings.encryption.private.is_empty() || settings.encryption.public.is_empty() {
+        if transport.encryption.private.is_empty() || transport.encryption.public.is_empty() {
             let server_pair = zmq::CurveKeyPair::new()?;
             let public_key_string = zmq::z85_encode(&server_pair.public_key).unwrap();
             let secret_key_string = zmq::z85_encode(&server_pair.secret_key).unwrap();
 
             info!("Encyption keys not set in application config: generating new ones");
-            settings.encryption.public = public_key_string;
-            settings.encryption.private = secret_key_string;
+            transport.encryption.public = public_key_string;
+            transport.encryption.private = secret_key_string;
         }
 
         // Create and run the engine message proxy in separate thread
@@ -53,7 +55,7 @@ impl Transport {
         Ok(())
     }
 
-    fn create_engine_message_proxy_thread(&self, context: zmq::Context, settings: &TransportSettings) -> thread::JoinHandle<()>{
+    fn create_engine_message_proxy_thread(&self, context: zmq::Context, settings: &Settings) -> thread::JoinHandle<()>{
         thread::spawn({
             let settings = settings.clone();
             move || {
@@ -63,7 +65,7 @@ impl Transport {
         }})
     }
 
-    fn create_relay_instruction_proxy_thread(&self, context: zmq::Context, settings: &TransportSettings) -> thread::JoinHandle<()>{
+    fn create_relay_instruction_proxy_thread(&self, context: zmq::Context, settings: &Settings) -> thread::JoinHandle<()>{
         thread::spawn({
             let settings = settings.clone();
             move || {
@@ -73,7 +75,7 @@ impl Transport {
         }})
     }
 
-    fn create_session_proxy_thread(&self, context: zmq::Context, settings: &TransportSettings) -> thread::JoinHandle<()>{
+    fn create_session_proxy_thread(&self, context: zmq::Context, settings: &Settings) -> thread::JoinHandle<()>{
         thread::spawn({
             let settings = settings.clone();
             move || {

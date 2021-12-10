@@ -1,9 +1,12 @@
 use crate::common::*;
+use crate::service::SessionService;
+
 use std::process;
 use std::vec::Vec;
 
 pub struct SessionProxy {
     context: zmq::Context,
+    service: SessionService,
 }
 
 impl SessionProxy {
@@ -11,11 +14,14 @@ impl SessionProxy {
     pub fn new(context: zmq::Context) -> Self {
         Self {
             context,
+            service: SessionService::new()
         }
     }
 
-    pub fn run(&self, settings: &TransportSettings) -> Result<()> {
-        let secure_rep_socket = self.create_secure_rep_socket(settings.ports.session, &settings.encryption.private)?;
+    pub fn run(&mut self, settings: &Settings) -> Result<()> {
+        let transport = &settings.transport;
+
+        let secure_rep_socket = self.create_secure_rep_socket(transport.ports.session, &transport.encryption.private)?;
 
         let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC])?;
 
@@ -72,8 +78,11 @@ impl SessionProxy {
                                     let username = session_parameters[1];
                                     let password = session_parameters[2];
                                     info!("Got session create command with username \"{}\" and password \"{}\"", username, password);
-                                    if let Err(error) = secure_rep_socket.send("123456789ABCDEF", 0) {
-                                        error!("Failed to send session create response: {}", error);
+
+                                    // Request session from WebX Session Manager
+                                    let message = self.create_session(settings, username, password);
+                                    if let Err(error) = secure_rep_socket.send(message.as_str(), 0) {
+                                        error!("Failed to send session creation response: {}", error);
                                     }
                                     send_empty = false;
     
@@ -123,5 +132,20 @@ impl SessionProxy {
         }
 
         Ok(socket)
+    }
+
+    fn create_session(&mut self, settings: &Settings, username: &str, password: &str) -> String {
+        match self.service.create_session(settings, username, password) {
+            Ok(session) => {
+                let session_id = session.id.to_simple();
+                let display_id = session.display.as_str();
+                info!("Created session {} on display {} for user {}", session_id, display_id, username);
+                format!("0,{}", session.id.to_simple())
+            },
+            Err(error) => {
+                error!("Failed to create session for user {}: {}", username, error);
+                format!("1,{}", error)
+            }
+        }
     }
 }

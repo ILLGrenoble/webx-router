@@ -13,10 +13,12 @@ impl RelayInstructionProxy {
         }
     }
 
-    pub fn run(&self, settings: &TransportSettings) -> Result<()> {
-        let relay_sub_socket = self.create_relay_sub_socket(settings.ports.collector)?;
+    pub fn run(&self, settings: &Settings) -> Result<()> {
+        let transport = &settings.transport;
 
-        let engine_pub_socket = self.create_engine_pub_socket(&settings.ipc.instruction_proxy)?;
+        let relay_sub_socket = self.create_relay_sub_socket(transport.ports.collector)?;
+
+        let engine_pub_socket = self.create_engine_pub_socket(&transport.ipc.instruction_proxy)?;
 
         let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC])?;
 

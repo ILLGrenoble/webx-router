@@ -10,6 +10,7 @@ use dotenv::dotenv;
 
 mod app;
 mod common;
+mod service;
 mod router;
 
 fn main() {

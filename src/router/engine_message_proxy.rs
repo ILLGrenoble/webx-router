@@ -13,10 +13,12 @@ impl EngineMessageProxy {
         }
     }
 
-    pub fn run(&self, settings: &TransportSettings) -> Result<()> {
-        let relay_publisher_socket = self.create_relay_publisher_socket(settings.ports.publisher)?;
+    pub fn run(&self, settings: &Settings) -> Result<()> {
+        let transport = &settings.transport;
+        
+        let relay_publisher_socket = self.create_relay_publisher_socket(transport.ports.publisher)?;
 
-        let engine_subscriber_socket = self.create_engine_subscriber_socket(&settings.ipc.message_proxy)?;
+        let engine_subscriber_socket = self.create_engine_subscriber_socket(&transport.ipc.message_proxy)?;
 
         let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC])?;
 
