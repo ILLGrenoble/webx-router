@@ -83,7 +83,7 @@ impl ClientConnector {
             }
         }
 
-        info!("Stopped Client Connector");
+        debug!("Stopped Client Connector");
 
         Ok(())
     }
@@ -94,7 +94,7 @@ impl ClientConnector {
 
         let address = format!("tcp://*:{}", port);
         match socket.bind(address.as_str()) {
-            Ok(_) => info!("Client Connector bound to {}", address),
+            Ok(_) => debug!("Client Connector bound to {}", address),
             Err(error) => return Err(RouterError::TransportError(format!("Failed to bind REP socket to {}: {}", address, error)))
         }
 

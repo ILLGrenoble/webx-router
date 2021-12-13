@@ -6,6 +6,7 @@ pub type Result<T> = result::Result<T, RouterError>;
 
 #[derive(Debug)]
 pub enum RouterError {
+    SystemError(String),
     TransportError(String),
     SessionError(String),
     IoError(std::io::Error),
@@ -17,14 +18,11 @@ impl Error for RouterError {}
 impl fmt::Display for RouterError {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            RouterError::TransportError(message) =>write!(formatter, "{}", message),
-            RouterError::SessionError(message) =>write!(formatter, "{}", message),
-            RouterError::IoError(err) => {
-                writeln!(formatter, "IoError: {}", err)
-            },
-            RouterError::ConfigError(err) => {
-                writeln!(formatter, "ConfigError: {}", err)
-            },
+            RouterError::SystemError(message) => write!(formatter, "SystemError: {}", message),
+            RouterError::TransportError(message) => write!(formatter, "TransportError: {}", message),
+            RouterError::SessionError(message) => write!(formatter, "SessionError: {}", message),
+            RouterError::IoError(err) => writeln!(formatter, "IoError: {}", err),
+            RouterError::ConfigError(err) => writeln!(formatter, "ConfigError: {}", err),
         }
     }
 }

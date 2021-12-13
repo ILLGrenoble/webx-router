@@ -49,4 +49,15 @@ impl Settings {
 
         settings_raw.try_into()
     }
+
+    pub fn verify(&self) -> bool {
+        // Check that settings are valid for running a router
+
+        if self.engine.path.is_empty() {
+            error!("Engine path is missing from settings");
+            return false;
+        }
+
+        true
+    }
 }

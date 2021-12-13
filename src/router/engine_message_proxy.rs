@@ -66,7 +66,7 @@ impl EngineMessageProxy {
             }
         }
 
-        info!("Stopped Engine Message Proxy");
+        debug!("Stopped Engine Message Proxy");
 
         Ok(())
     }
@@ -76,7 +76,7 @@ impl EngineMessageProxy {
         socket.set_linger(0)?;
         let address = format!("tcp://*:{}", port);
         match socket.bind(address.as_str()) {
-            Ok(_) => info!("Message Proxy bound to {}", address),
+            Ok(_) => debug!("Message Proxy bound to {}", address),
             Err(error) => {
                 error!("Failed to bind PUB socket to {}: {}", address, error);
                 process::exit(1);

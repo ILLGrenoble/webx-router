@@ -108,7 +108,7 @@ impl SessionProxy {
             }
         }
 
-        info!("Stopped Session Proxy");
+        debug!("Stopped Session Proxy");
 
         Ok(())
     }
@@ -124,7 +124,7 @@ impl SessionProxy {
 
         let address = format!("tcp://*:{}", port);
         match socket.bind(address.as_str()) {
-            Ok(_) => info!("Session Proxy bound to {}", address),
+            Ok(_) => debug!("Session Proxy bound to {}", address),
             Err(error) => {
                 error!("Failed to bind Session Proxy socket to {}: {}", address, error);
                 process::exit(1);
@@ -138,8 +138,8 @@ impl SessionProxy {
         match self.service.create_session(settings, username, password) {
             Ok(session) => {
                 let session_id = session.id.to_simple();
-                let display_id = session.display.as_str();
-                info!("Created session {} on display {} for user {}", session_id, display_id, username);
+                let display_id = session.display_id.as_str();
+                debug!("Created session {} on display {} for user \"{}\"", session_id, display_id, username);
                 format!("0,{}", session.id.to_simple())
             },
             Err(error) => {
