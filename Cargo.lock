@@ -346,6 +346,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-child"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7973bb8d5c8b476d46a79a7f468d82a5541681e001317f65e9e19c073f2dbb7"
+
+[[package]]
 name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -424,6 +430,7 @@ dependencies = [
  "env_logger",
  "log",
  "serde 1.0.130",
+ "signal-child",
  "uuid",
  "zmq",
 ]

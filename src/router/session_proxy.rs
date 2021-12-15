@@ -46,6 +46,9 @@ impl SessionProxy {
                         if event == APPLICATION_SHUTDOWN_COMMAND {
                             is_running = false;
 
+                            // Close all sessions gracefully
+                            self.service.stop_sessions();
+
                         } else {
                             warn!("Got unknown event bus command: {}", event);
                         }
@@ -62,7 +65,6 @@ impl SessionProxy {
                     } else {
                         // Decode message
                         let message_text = msg.as_str().unwrap();
-
 
                         if message_text == "ping" {
                             // Ping response

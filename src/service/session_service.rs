@@ -4,6 +4,7 @@ use uuid::Uuid;
 use std::{thread, time};
 use std::process::{Command, Child};
 use std::os::unix::process::CommandExt;
+use signal_child::Signalable;
 
 pub struct Engine {
     process: Child,
@@ -39,6 +40,7 @@ impl SessionService {
     pub fn create_session(&mut self, settings: &Settings, username: &str, password: &str) -> Result<&Session> {
         // Request display/session Id from WebX Session Manager
         let ses_man_response = self.request_authenticated_x11_display(username, password)?;
+        debug!("Got response for session manager: user \"{}\" has display on \"{}\"", ses_man_response.username, ses_man_response.display_id);
         let display_id = ses_man_response.display_id;
 
         // See if session exists already: create if not
@@ -75,8 +77,17 @@ impl SessionService {
         };
     }
 
-    pub fn stop_sesions(&self) {
+    pub fn stop_sessions(&mut self) {
+        for session in self.sessions.iter_mut() {
+            let engine = &mut session.engine;
+            let process = &mut engine.process;
+            match process.interrupt() {
+                Ok(_) => debug!("Shutdown WebX Engine for {} on display {}", session.username, session.display_id),
+                Err(error) => error!("Failed to interrupt WebX Engine for {} running on PID {}: {}", session.username, process.id(), error),
+            }
+        }
 
+        self.sessions.clear();
     }
 
     fn get_session(&self, username: &str, display_id: &str) -> Option<&Session> {
