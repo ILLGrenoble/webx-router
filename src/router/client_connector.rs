@@ -1,7 +1,7 @@
 use crate::common::*;
 
 pub struct ClientConnector {
-    context: zmq:: Context,
+    context: zmq::Context,
 }
 
 impl ClientConnector {

@@ -56,7 +56,7 @@ impl RelayInstructionProxy {
                         error!("Failed to received message from relay publisher: {}", error);
 
                     } else {
-                        debug!("Got message from relay of length {}", msg.len());
+                        trace!("Got message from relay of length {}", msg.len());
                         // Resend message on engine pub socket
                         if let Err(error) = engine_pub_socket.send(msg, 0) {
                             error!("Failed to send message to engine subscribers: {}", error);
@@ -89,13 +89,18 @@ impl RelayInstructionProxy {
         Ok(socket)
     }
 
-    fn create_engine_pub_socket(&self, address: &String) -> Result<zmq::Socket> {
+    fn create_engine_pub_socket(&self, path: &String) -> Result<zmq::Socket> {
         let socket = self.context.socket(zmq::PUB)?;
         socket.set_linger(0)?;
-        if let Err(error) = socket.bind(address) {
+        let address = format!("ipc://{}", path);
+        if let Err(error) = socket.bind(address.as_str()) {
             error!("Failed to bind engine PUB socket to {}: {}", address, error);
             process::exit(1);
         }
+
+        // Make sure socket is accessible to all users
+        User::change_file_permissions(path, "777")?;
+
         Ok(socket)
     }
 }

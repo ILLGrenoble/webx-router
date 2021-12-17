@@ -56,7 +56,7 @@ impl EngineMessageProxy {
                         error!("Failed to received message from engine message publisher: {}", error);
 
                     } else {
-                        debug!("Got message from engine of length {}", msg.len());
+                        trace!("Got message from engine of length {}", msg.len());
                         // Resend message on publisher socket
                         if let Err(error) = relay_publisher_socket.send(msg, 0) {
                             error!("Failed to send message to relay message subscriber: {}", error);
@@ -86,15 +86,20 @@ impl EngineMessageProxy {
         Ok(socket)
     }
 
-    fn create_engine_subscriber_socket(&self, address: &String) -> Result<zmq::Socket> {
+    fn create_engine_subscriber_socket(&self, path: &String) -> Result<zmq::Socket> {
         let socket = self.context.socket(zmq::SUB)?;
         // Listen on all topics
         socket.set_subscribe(b"")?;
         socket.set_linger(0)?;
-        if let Err(error) = socket.bind(address) {
+        let address = format!("ipc://{}", path);
+        if let Err(error) = socket.bind(address.as_str()) {
             error!("Failed to bind engine SUB socket to {}: {}", address, error);
             process::exit(1);
         }
+
+        // Make sure socket is accessible to all users
+        User::change_file_permissions(path, "777")?;
+
         Ok(socket)
     }
 }

@@ -6,10 +6,13 @@ transport:
     collector: 5557
     session: 5558
   ipc:
-    message_proxy: "ipc:///tmp/webx-router-message-proxy.ipc"
-    instruction_proxy: "ipc:///tmp/webx-router-instruction-proxy.ipc"
+    message_proxy: "/tmp/webx-router-message-proxy.ipc"
+    instruction_proxy: "/tmp/webx-router-instruction-proxy.ipc"
   encryption:
     public: ""
     private: ""
+sesman:
+  enabled: true
+  fallback_display_id: ":0"
 engine:
   path: ""

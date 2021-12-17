@@ -139,9 +139,6 @@ impl SessionProxy {
     fn create_session(&mut self, settings: &Settings, username: &str, password: &str) -> String {
         match self.service.create_session(settings, username, password) {
             Ok(session) => {
-                let session_id = session.id.to_simple();
-                let display_id = session.display_id.as_str();
-                debug!("Created session {} on display {} for user \"{}\"", session_id, display_id, username);
                 format!("0,{}", session.id.to_simple())
             },
             Err(error) => {

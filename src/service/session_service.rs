@@ -38,9 +38,16 @@ impl SessionService {
     }
 
     pub fn create_session(&mut self, settings: &Settings, username: &str, password: &str) -> Result<&Session> {
-        // Request display/session Id from WebX Session Manager
-        let ses_man_response = self.request_authenticated_x11_display(username, password)?;
-        debug!("Got response for session manager: user \"{}\" has display on \"{}\"", ses_man_response.username, ses_man_response.display_id);
+        // See if we are using the session manager
+        let ses_man_response;
+        if settings.sesman.enabled {
+            // Request display/session Id from WebX Session Manager
+            ses_man_response = self.request_authenticated_x11_display(username, password)?;
+            debug!("Got response for session manager: user \"{}\" has display on \"{}\"", ses_man_response.username, ses_man_response.display_id);
+        
+        } else {
+            ses_man_response = self.get_fallback_x11_display(settings)?;
+        }
         let display_id = ses_man_response.display_id;
 
         // See if session exists already: create if not
@@ -65,7 +72,9 @@ impl SessionService {
 
             // Store session
             self.sessions.push(session);
-        
+
+            debug!("Created session {} on display {} for user \"{}\"", session_id, display_id, username);
+
         } else {
             debug!("Session exists for user \"{}\" on display {}", username, display_id);
         }
@@ -82,7 +91,10 @@ impl SessionService {
             let engine = &mut session.engine;
             let process = &mut engine.process;
             match process.interrupt() {
-                Ok(_) => debug!("Shutdown WebX Engine for {} on display {}", session.username, session.display_id),
+                Ok(_) => {
+                    debug!("Shutdown WebX Engine for {} on display {}", session.username, session.display_id);
+                    thread::sleep(time::Duration::from_millis(1000));
+                },
                 Err(error) => error!("Failed to interrupt WebX Engine for {} running on PID {}: {}", session.username, process.id(), error),
             }
         }
@@ -92,6 +104,16 @@ impl SessionService {
 
     fn get_session(&self, username: &str, display_id: &str) -> Option<&Session> {
         self.sessions.iter().find(|&session| session.display_id == display_id && session.username == username)
+    }
+
+    fn get_fallback_x11_display(&self, settings: &Settings) -> Result<SessionManagerResponse> {
+        let username = User::get_current_username()?;
+        let display = &settings.sesman.fallback_display_id;
+        Ok(SessionManagerResponse {
+            username: username,
+            display_id: display.to_string(),
+            xauth_path: "".to_string(),
+        })
     }
 
     fn request_authenticated_x11_display(&self, username: &str, password: &str) -> Result<SessionManagerResponse> {
@@ -117,22 +139,31 @@ impl SessionService {
 
         // Get UID of user to run process as
         let uid = User::get_uid_for_username(username)?;
-        debug!("Launching WebX Engine \"{}\" as user \"{}\" ({}) on display {}", engine_path, username, uid, display);
 
-        match Command::new(engine_path)
-            .uid(uid)
+        let mut command = Command::new(engine_path);
+        command
             .env("DISPLAY", display)
-            .env("XAUTHORITY", xauth_path)
             .env("WEBX_ENGINE_IPC_MESSAGE_PROXY_ADDRESS", message_proxy_addr)
             .env("WEBX_ENGINE_IPC_INSTRUCTION_PROXY_ADDRESS", instruction_proxy_addr)
-            .env("WEBX_ENGINE_SESSION_ID", session_uuid.to_simple().to_string())
-            .spawn() {
-                Err(error) => Err(RouterError::SessionError(format!("Failed to spawn WebX Engine: {}", error))),
-                Ok(child) => Ok(Engine {
-                    process: child,
-                    ipc: "".to_string()
-                })
-            }
+            .env("WEBX_ENGINE_SESSION_ID", session_uuid.to_simple().to_string());
+
+        if settings.sesman.enabled {
+            debug!("Launching WebX Engine \"{}\" as user \"{}\" ({}) on display {}", engine_path, username, uid, display);
+            command
+                .uid(uid)
+                .env("XAUTHORITY", xauth_path);
+        
+        } else {
+            debug!("Launching WebX Engine \"{}\" as current user \"{}\" ({}) on display {}", engine_path, username, uid, display);
+        }
+
+        match command.spawn() {
+            Err(error) => Err(RouterError::SessionError(format!("Failed to spawn WebX Engine: {}", error))),
+            Ok(child) => Ok(Engine {
+                process: child,
+                ipc: "".to_string()
+            })
+        }
     }
 
 }
