@@ -1,7 +1,7 @@
 use crate::common::User;
 
 use serde::Deserialize;
-use std::process;
+use std::fs;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct PortSettings {
@@ -33,6 +33,7 @@ pub struct TransportSettings {
 #[derive(Debug, Deserialize, Clone)]
 pub struct EngineSettings {
     pub path: String,
+    pub logdir: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -69,7 +70,7 @@ impl Settings {
         if uid != 0 {
             if self.sesman.enabled {
                 error!("App has to be run as root");
-                process::exit(1);
+                return false;
             
             } else {
                 debug!("App running as non-root user {}", uid);
@@ -79,6 +80,12 @@ impl Settings {
         // Verify engine path is set
         if self.engine.path.is_empty() {
             error!("Engine path is missing from settings");
+            return false;
+        }
+
+        // Verify engine log dir
+        if let Err(error) = fs::create_dir_all(&self.engine.logdir) {
+            error!("Cannot create engine log directory at {}: {}", self.engine.logdir, error);
             return false;
         }
 

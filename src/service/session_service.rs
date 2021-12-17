@@ -2,8 +2,11 @@ use crate::common::*;
 
 use uuid::Uuid;
 use std::{thread, time};
-use std::process::{Command, Child};
+use std::process::{Command, Child, Stdio};
 use std::os::unix::process::CommandExt;
+use std::os::unix::io::{FromRawFd, IntoRawFd};
+use std::fs::File;
+
 use signal_child::Signalable;
 
 pub struct Engine {
@@ -93,7 +96,6 @@ impl SessionService {
             match process.interrupt() {
                 Ok(_) => {
                     debug!("Shutdown WebX Engine for {} on display {}", session.username, session.display_id);
-                    thread::sleep(time::Duration::from_millis(1000));
                 },
                 Err(error) => error!("Failed to interrupt WebX Engine for {} running on PID {}: {}", session.username, process.id(), error),
             }
@@ -132,20 +134,28 @@ impl SessionService {
 
     fn spawn_engine(&self, username: &str, session_uuid: &Uuid, display: &str, xauth_path: &str, settings: &Settings) -> Result<Engine> {
         let engine_path = &settings.engine.path;
+        let engine_logdir = &settings.engine.logdir;
         let message_proxy_addr = &settings.transport.ipc.message_proxy;
         let instruction_proxy_addr = &settings.transport.ipc.instruction_proxy;
 
-        // TODO redirect output to file?
+        let session_id = session_uuid.to_simple();
 
         // Get UID of user to run process as
         let uid = User::get_uid_for_username(username)?;
 
+        // Get engine log path
+        let log_path = format!("{}/webx-engine.{}.{}.log", engine_logdir, uid, session_id);
+        let file_descriptor = File::create(log_path).unwrap().into_raw_fd();
+        let file_out = unsafe { Stdio::from_raw_fd(file_descriptor) };
+
         let mut command = Command::new(engine_path);
         command
+            .stdout(file_out)
             .env("DISPLAY", display)
+            .env("WEBX_ENGINE_LOG", "debug")
             .env("WEBX_ENGINE_IPC_MESSAGE_PROXY_ADDRESS", message_proxy_addr)
             .env("WEBX_ENGINE_IPC_INSTRUCTION_PROXY_ADDRESS", instruction_proxy_addr)
-            .env("WEBX_ENGINE_SESSION_ID", session_uuid.to_simple().to_string());
+            .env("WEBX_ENGINE_SESSION_ID", session_id.to_string());
 
         if settings.sesman.enabled {
             debug!("Launching WebX Engine \"{}\" as user \"{}\" ({}) on display {}", engine_path, username, uid, display);
