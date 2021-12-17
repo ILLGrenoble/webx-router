@@ -11,15 +11,15 @@ use signal_child::Signalable;
 
 pub struct Engine {
     process: Child,
-    ipc: String, // specific req-rep address used to verify that the engine is running?
+    pub ipc: String, // specific req-rep address used to verify that the engine is running?
 }
 
 pub struct Session {
     pub id: Uuid,
     pub display_id: String,
     pub xauth_path: String,
-    username: String,
-    engine: Engine,
+    pub username: String,
+    pub engine: Engine,
 }
 
 struct SessionManagerResponse {
@@ -137,6 +137,7 @@ impl SessionService {
         let engine_logdir = &settings.engine.logdir;
         let message_proxy_addr = &settings.transport.ipc.message_proxy;
         let instruction_proxy_addr = &settings.transport.ipc.instruction_proxy;
+        let engine_connector_root_path = &settings.transport.ipc.engine_connector_root;
 
         let session_id = session_uuid.to_simple();
 
@@ -148,11 +149,15 @@ impl SessionService {
         let file_descriptor = File::create(log_path).unwrap().into_raw_fd();
         let file_out = unsafe { Stdio::from_raw_fd(file_descriptor) };
 
+        // Get engine connector IPC path
+        let ipc_path = format!("{}.{}.ipc", engine_connector_root_path, session_id);
+
         let mut command = Command::new(engine_path);
         command
             .stdout(file_out)
             .env("DISPLAY", display)
             .env("WEBX_ENGINE_LOG", "debug")
+            .env("WEBX_ENGINE_IPC_SESSION_CONNECTOR_ADDRESS", &ipc_path)
             .env("WEBX_ENGINE_IPC_MESSAGE_PROXY_ADDRESS", message_proxy_addr)
             .env("WEBX_ENGINE_IPC_INSTRUCTION_PROXY_ADDRESS", instruction_proxy_addr)
             .env("WEBX_ENGINE_SESSION_ID", session_id.to_string());
@@ -171,7 +176,7 @@ impl SessionService {
             Err(error) => Err(RouterError::SessionError(format!("Failed to spawn WebX Engine: {}", error))),
             Ok(child) => Ok(Engine {
                 process: child,
-                ipc: "".to_string()
+                ipc: ipc_path
             })
         }
     }

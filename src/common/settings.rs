@@ -21,6 +21,7 @@ pub struct EncryptionSettings {
 pub struct IPCSettings {
     pub message_proxy: String,
     pub instruction_proxy: String,
+    pub engine_connector_root: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
