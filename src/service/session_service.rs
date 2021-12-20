@@ -62,9 +62,6 @@ impl SessionService {
             // Spawn a new WebX Engine
             let engine = self.spawn_engine(&username, &session_id, &display_id, &ses_man_response.xauth_path, &settings)?;
 
-            // Wait for engine process to start fully?
-            // TODO
-
             let session = Session {
                 id: session_id,
                 display_id: display_id.clone(),
@@ -135,8 +132,8 @@ impl SessionService {
     fn spawn_engine(&self, username: &str, session_uuid: &Uuid, display: &str, xauth_path: &str, settings: &Settings) -> Result<Engine> {
         let engine_path = &settings.engine.path;
         let engine_logdir = &settings.engine.logdir;
-        let message_proxy_addr = &settings.transport.ipc.message_proxy;
-        let instruction_proxy_addr = &settings.transport.ipc.instruction_proxy;
+        let message_proxy_path = &settings.transport.ipc.message_proxy;
+        let instruction_proxy_path = &settings.transport.ipc.instruction_proxy;
         let engine_connector_root_path = &settings.transport.ipc.engine_connector_root;
 
         let session_id = session_uuid.to_simple();
@@ -145,21 +142,29 @@ impl SessionService {
         let uid = User::get_uid_for_username(username)?;
 
         // Get engine log path
-        let log_path = format!("{}/webx-engine.{}.{}.log", engine_logdir, uid, session_id);
-        let file_descriptor = File::create(log_path).unwrap().into_raw_fd();
+        let log_path: String;
+        if settings.sesman.enabled {
+            log_path = format!("{}/webx-engine.{}.{}.log", engine_logdir, uid, session_id);
+        
+        } else {
+            log_path = format!("{}/webx-engine.log", engine_logdir);
+        }
+
+        let file = File::create(log_path)?;
+        let file_descriptor = file.into_raw_fd();
         let file_out = unsafe { Stdio::from_raw_fd(file_descriptor) };
 
         // Get engine connector IPC path
-        let ipc_path = format!("{}.{}.ipc", engine_connector_root_path, session_id);
+        let session_connector_path = format!("{}.{}.ipc", engine_connector_root_path, session_id);
 
         let mut command = Command::new(engine_path);
         command
             .stdout(file_out)
             .env("DISPLAY", display)
             .env("WEBX_ENGINE_LOG", "debug")
-            .env("WEBX_ENGINE_IPC_SESSION_CONNECTOR_ADDRESS", &ipc_path)
-            .env("WEBX_ENGINE_IPC_MESSAGE_PROXY_ADDRESS", message_proxy_addr)
-            .env("WEBX_ENGINE_IPC_INSTRUCTION_PROXY_ADDRESS", instruction_proxy_addr)
+            .env("WEBX_ENGINE_IPC_SESSION_CONNECTOR_PATH", &session_connector_path)
+            .env("WEBX_ENGINE_IPC_MESSAGE_PROXY_PATH", message_proxy_path)
+            .env("WEBX_ENGINE_IPC_INSTRUCTION_PROXY_PATH", instruction_proxy_path)
             .env("WEBX_ENGINE_SESSION_ID", session_id.to_string());
 
         if settings.sesman.enabled {
@@ -176,7 +181,7 @@ impl SessionService {
             Err(error) => Err(RouterError::SessionError(format!("Failed to spawn WebX Engine: {}", error))),
             Ok(child) => Ok(Engine {
                 process: child,
-                ipc: ipc_path
+                ipc: session_connector_path
             })
         }
     }

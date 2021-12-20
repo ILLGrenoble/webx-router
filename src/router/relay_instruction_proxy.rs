@@ -53,13 +53,13 @@ impl RelayInstructionProxy {
                 if items[1].is_readable() && is_running {
                     // Get message from relay publisher
                     if let Err(error) = relay_sub_socket.recv(&mut msg, 0) {
-                        error!("Failed to received message from relay publisher: {}", error);
+                        error!("Failed to received instruction from relay publisher: {}", error);
 
                     } else {
-                        trace!("Got message from relay of length {}", msg.len());
+                        trace!("Got instruction from relay of length {}", msg.len());
                         // Resend message on engine pub socket
                         if let Err(error) = engine_pub_socket.send(msg, 0) {
-                            error!("Failed to send message to engine subscribers: {}", error);
+                            error!("Failed to send instruction to engine subscribers: {}", error);
                         }   
                     }
                 }

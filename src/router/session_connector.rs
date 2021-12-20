@@ -38,7 +38,7 @@ impl SessionConnector {
 
         debug!("Received pong response from {}", path);
 
-        req_socket.disconnect(path)?;
+        self.disconnect_req_socket(&req_socket, path);
 
         Ok(())
     }
@@ -46,6 +46,7 @@ impl SessionConnector {
     fn create_req_socket(&self, path: &str) -> Result<zmq::Socket> {
         let socket = self.context.socket(zmq::REQ)?;
         socket.set_linger(0)?;
+        socket.set_rcvtimeo(1000)?;
 
         let address = format!("ipc://{}", path);
         match socket.connect(address.as_str()) {
@@ -56,4 +57,11 @@ impl SessionConnector {
         Ok(socket)
     }
 
+    fn disconnect_req_socket(&self, socket: &zmq::Socket, path: &str) {
+        let address = format!("ipc://{}", path);
+        match socket.disconnect(&address) {
+            Ok(_) => debug!("Disconnected from Session Connector socket at {}:", path),
+            Err(error) => warn!("Failed to disconnect from Session Connector socket at {}: {}", path, error)
+        }
+    }
 }
