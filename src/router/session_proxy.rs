@@ -1,6 +1,5 @@
 use crate::common::*;
 use crate::service::SessionService;
-use crate::router::SessionConnector;
 
 use std::process;
 use std::vec::Vec;
@@ -138,31 +137,8 @@ impl SessionProxy {
     }
 
     fn create_session(&mut self, settings: &Settings, username: &str, password: &str) -> String {
-        match self.service.create_session(settings, username, password) {
-            Ok(session) => {
-                // Verify session is running
-                let session_connector = SessionConnector::new(self.context.clone());
-                let mut retry = 3;
-                let mut ponged = false;
-                let mut connection_error = "".to_string();
-                while retry > 0 && !ponged {
-                    match session_connector.validate_connection(&session.engine.ipc) {
-                        Ok(_) => ponged = true,
-                        Err(error) => {
-                            connection_error = error.to_string();
-                            retry = retry - 1;
-                        }
-                    }
-                }
-
-                if ponged {
-                    return format!("0,{}", session.id.to_simple());
-                    
-                } else {
-                    error!("Failed to validate that WebX Engine is running for user {}: {}", username, connection_error);
-                    format!("1,{}", connection_error)
-                }
-            },
+        match self.service.create_session(settings, username, password, &self.context) {
+            Ok(session) => format!("0,{}", session.id.to_simple()),
             Err(error) => {
                 error!("Failed to create session for user {}: {}", username, error);
                 format!("1,{}", error)

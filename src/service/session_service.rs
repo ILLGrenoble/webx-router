@@ -1,4 +1,5 @@
 use crate::common::*;
+use crate::service::SessionConnector;
 
 use uuid::Uuid;
 use std::{thread, time};
@@ -40,7 +41,7 @@ impl SessionService {
         }
     }
 
-    pub fn create_session(&mut self, settings: &Settings, username: &str, password: &str) -> Result<&Session> {
+    pub fn create_session(&mut self, settings: &Settings, username: &str, password: &str, context: &zmq::Context) -> Result<&Session> {
         // See if we are using the session manager
         let ses_man_response;
         if settings.sesman.enabled {
@@ -61,6 +62,11 @@ impl SessionService {
 
             // Spawn a new WebX Engine
             let engine = self.spawn_engine(&username, &session_id, &display_id, &ses_man_response.xauth_path, &settings)?;
+
+            // Validate that the engine is running
+            if let Err(error) = self.validate_engine(&engine, context) {
+                error!("Failed to validate that WebX Engine is running for user {}: {}", username, error);
+            }
 
             let session = Session {
                 id: session_id,
@@ -184,6 +190,23 @@ impl SessionService {
                 ipc: session_connector_path
             })
         }
+    }
+
+    fn validate_engine(&self, engine: &Engine, context: &zmq::Context) -> Result<()> {
+        // Verify session is running
+        let session_connector = SessionConnector::new(context.clone());
+        let mut retry = 3;
+        let mut connection_error = "".to_string();
+        while retry > 0 {
+            match session_connector.validate_connection(&engine.ipc) {
+                Ok(_) => return Ok(()),
+                Err(error) => {
+                    connection_error = error.to_string();
+                    retry = retry - 1;
+                }
+            }
+        }
+        Err(RouterError::SessionError(connection_error))
     }
 
 }
