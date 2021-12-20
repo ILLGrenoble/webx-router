@@ -98,8 +98,8 @@ impl RelayInstructionProxy {
             process::exit(1);
         }
 
-        // Make sure socket is accessible to all users
-        User::change_file_permissions(path, "777")?;
+        // Make sure socket is accessible only to current user
+        User::change_file_permissions(path, "700")?;
 
         Ok(socket)
     }

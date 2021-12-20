@@ -1,5 +1,3 @@
-use crate::common::User;
-
 use serde::Deserialize;
 use std::fs;
 
@@ -65,18 +63,6 @@ impl Settings {
 
     pub fn verify(&self) -> bool {
         // Check that settings are valid for running a router
-
-        // Verify we are running as root if sesman is used (production usage)
-        let uid = User::get_current_user_uid();
-        if uid != 0 {
-            if self.sesman.enabled {
-                error!("App has to be run as root");
-                return false;
-            
-            } else {
-                debug!("App running as non-root user {}", uid);
-            }
-        }
 
         // Verify engine path is set
         if self.engine.path.is_empty() {

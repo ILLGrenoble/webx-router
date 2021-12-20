@@ -4,7 +4,6 @@ use crate::service::SessionConnector;
 use uuid::Uuid;
 use std::{thread, time};
 use std::process::{Command, Child, Stdio};
-use std::os::unix::process::CommandExt;
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::fs::File;
 
@@ -61,7 +60,7 @@ impl SessionService {
             let session_id = Uuid::new_v4();
 
             // Spawn a new WebX Engine
-            let engine = self.spawn_engine(&username, &session_id, &display_id, &ses_man_response.xauth_path, &settings)?;
+            let engine = self.spawn_engine(&session_id, &display_id, &ses_man_response.xauth_path, &settings)?;
 
             // Validate that the engine is running
             if let Err(error) = self.validate_engine(&engine, context) {
@@ -135,7 +134,7 @@ impl SessionService {
         })
     }
 
-    fn spawn_engine(&self, username: &str, session_uuid: &Uuid, display: &str, xauth_path: &str, settings: &Settings) -> Result<Engine> {
+    fn spawn_engine(&self, session_uuid: &Uuid, display: &str, xauth_path: &str, settings: &Settings) -> Result<Engine> {
         let engine_path = &settings.engine.path;
         let engine_logdir = &settings.engine.logdir;
         let message_proxy_path = &settings.transport.ipc.message_proxy;
@@ -144,13 +143,10 @@ impl SessionService {
 
         let session_id = session_uuid.to_simple();
 
-        // Get UID of user to run process as
-        let uid = User::get_uid_for_username(username)?;
-
         // Get engine log path
         let log_path: String;
         if settings.sesman.enabled {
-            log_path = format!("{}/webx-engine.{}.{}.log", engine_logdir, uid, session_id);
+            log_path = format!("{}/webx-engine.{}.log", engine_logdir, session_id);
         
         } else {
             log_path = format!("{}/webx-engine.log", engine_logdir);
@@ -174,13 +170,12 @@ impl SessionService {
             .env("WEBX_ENGINE_SESSION_ID", session_id.to_string());
 
         if settings.sesman.enabled {
-            debug!("Launching WebX Engine \"{}\" as user \"{}\" ({}) on display {}", engine_path, username, uid, display);
+            debug!("Launching WebX Engine \"{}\" on display {}", engine_path, display);
             command
-                .uid(uid)
                 .env("XAUTHORITY", xauth_path);
         
         } else {
-            debug!("Launching WebX Engine \"{}\" as current user \"{}\" ({}) on display {}", engine_path, username, uid, display);
+            debug!("Launching WebX Engine \"{}\" on display {}", engine_path, display);
         }
 
         match command.spawn() {
