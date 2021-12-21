@@ -2,7 +2,6 @@ use crate::common::*;
 use crate::service::SessionConnector;
 
 use uuid::Uuid;
-use std::{thread, time};
 use std::process::{Command, Child, Stdio};
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::fs::File;
