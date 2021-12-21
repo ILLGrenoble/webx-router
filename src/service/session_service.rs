@@ -54,13 +54,13 @@ impl SessionService {
         let display_id = ses_man_response.display_id;
 
         // See if session exists already: create if not
-        if self.get_session(&username, &display_id).is_none() {
+        if self.get_session(username, &display_id).is_none() {
             debug!("Creating session for user \"{}\" on display {}", username, display_id);
             // Create a session Id
             let session_id = Uuid::new_v4();
 
             // Spawn a new WebX Engine
-            let engine = self.spawn_engine(&session_id, &display_id, &ses_man_response.xauth_path, &settings)?;
+            let engine = self.spawn_engine(&session_id, &display_id, &ses_man_response.xauth_path, settings)?;
 
             // Validate that the engine is running
             if let Err(error) = self.validate_engine(&engine, context) {
@@ -72,7 +72,7 @@ impl SessionService {
                 display_id: display_id.clone(),
                 xauth_path: ses_man_response.xauth_path,
                 username: username.to_string(),
-                engine: engine
+                engine
             };
 
             // Store session
@@ -85,9 +85,9 @@ impl SessionService {
         }
 
         // Return the session
-        match self.get_session(&username, &display_id) {
-            Some(session) => return Ok(session),
-            None => return Err(RouterError::SessionError(format!("Could not create retrieve Session for user \"{}\"", username)))
+        return match self.get_session(username, &display_id) {
+            Some(session) => Ok(session),
+            None => Err(RouterError::SessionError(format!("Could not create retrieve Session for user \"{}\"", username)))
         };
     }
 
@@ -114,7 +114,7 @@ impl SessionService {
         let username = User::get_current_username()?;
         let display = &settings.sesman.fallback_display_id;
         Ok(SessionManagerResponse {
-            username: username,
+            username,
             display_id: display.to_string(),
             xauth_path: "".to_string(),
         })
@@ -125,7 +125,7 @@ impl SessionService {
         // TODO
 
         // Fake slow creation
-        thread::sleep(time::Duration::from_millis(2000));
+        // thread::sleep(time::Duration::from_millis(2000));
 
         Ok(SessionManagerResponse {
             username: username.to_string(),
@@ -197,7 +197,7 @@ impl SessionService {
                 Ok(_) => return Ok(()),
                 Err(error) => {
                     connection_error = error.to_string();
-                    retry = retry - 1;
+                    retry -= 1;
                 }
             }
         }

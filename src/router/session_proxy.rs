@@ -1,6 +1,7 @@
 use crate::common::*;
 use crate::service::SessionService;
 
+use std::str;
 use std::process;
 use std::vec::Vec;
 
@@ -35,7 +36,7 @@ impl SessionProxy {
             ];
 
             // Poll both sockets
-            if let Ok(_) = zmq::poll(&mut items, -1) {
+            if zmq::poll(&mut items, -1).is_ok() {
                 // Check for event bus messages
                 if items[0].is_readable() {
                     if let Err(error) = event_bus_sub_socket.recv(&mut msg, 0) {
@@ -74,15 +75,18 @@ impl SessionProxy {
                             send_empty = false;
 
                         } else {
-                            let session_parameters = message_text.split(",").collect::<Vec<&str>>();
+                            let session_parameters = message_text.split(',').collect::<Vec<&str>>();
                             if session_parameters[0] == "create" {
                                 if session_parameters.len() == 3 {
-                                    let username = session_parameters[1];
-                                    let password = session_parameters[2];
+                                    let username_base64 = session_parameters[1];
+                                    let password_base64 = session_parameters[2];
+                                    let username = self.decode_base64(username_base64)?;
+                                    let password = self.decode_base64(password_base64)?;
+
                                     info!("Got session create command with username \"{}\" and password \"{}\"", username, password);
 
                                     // Request session from WebX Session Manager
-                                    let message = self.create_session(settings, username, password);
+                                    let message = self.create_session(settings, &username, &password);
                                     if let Err(error) = secure_rep_socket.send(message.as_str(), 0) {
                                         error!("Failed to send session creation response: {}", error);
                                     }
@@ -144,5 +148,13 @@ impl SessionProxy {
                 format!("1,{}", error)
             }
         }
+    }
+
+    fn decode_base64(&self, input: &str) -> Result<String> {
+        let decoded_bytes = base64::decode(input)?;
+
+        let output = str::from_utf8(&decoded_bytes)?;
+
+        Ok(output.to_string())
     }
 }

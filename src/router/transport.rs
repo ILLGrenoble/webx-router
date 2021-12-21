@@ -11,7 +11,7 @@ impl Transport {
 
     pub fn new(context: zmq::Context) -> Self {
         Self {
-            context: context,
+            context,
         }
     }
 
@@ -39,7 +39,7 @@ impl Transport {
         let session_proxy_thread = self.create_session_proxy_thread(self.context.clone(), settings);
 
         // Create and run the Client Connector in the current thread (blocking)
-        if let Err(error) = ClientConnector::new(self.context.clone()).run(&settings) {
+        if let Err(error) = ClientConnector::new(self.context.clone()).run(settings) {
             error!("Error while running Client Connector: {}", error);
         }
 

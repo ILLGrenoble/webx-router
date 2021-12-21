@@ -32,7 +32,7 @@ impl RelayInstructionProxy {
             ];
 
             // Poll both sockets
-            if let Ok(_) = zmq::poll(&mut items, -1) {
+            if zmq::poll(&mut items, -1).is_ok() {
                 // Check for message_bus messages
                 if items[0].is_readable() {
                     if let Err(error) = event_bus_sub_socket.recv(&mut msg, 0) {
@@ -89,7 +89,7 @@ impl RelayInstructionProxy {
         Ok(socket)
     }
 
-    fn create_engine_pub_socket(&self, path: &String) -> Result<zmq::Socket> {
+    fn create_engine_pub_socket(&self, path: &str) -> Result<zmq::Socket> {
         let socket = self.context.socket(zmq::PUB)?;
         socket.set_linger(0)?;
         let address = format!("ipc://{}", path);

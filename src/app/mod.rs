@@ -1,3 +1,3 @@
-pub use app::Application;
+pub use application::Application;
 
-mod app;
+mod application;

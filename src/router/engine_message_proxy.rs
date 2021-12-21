@@ -32,7 +32,7 @@ impl EngineMessageProxy {
             ];
 
             // Poll both sockets
-            if let Ok(_) = zmq::poll(&mut items, -1) {
+            if zmq::poll(&mut items, -1).is_ok() {
                 // Check for event bus messages
                 if items[0].is_readable() {
                     if let Err(error) = event_bus_sub_socket.recv(&mut msg, 0) {
@@ -86,7 +86,7 @@ impl EngineMessageProxy {
         Ok(socket)
     }
 
-    fn create_engine_subscriber_socket(&self, path: &String) -> Result<zmq::Socket> {
+    fn create_engine_subscriber_socket(&self, path: &str) -> Result<zmq::Socket> {
         let socket = self.context.socket(zmq::SUB)?;
         // Listen on all topics
         socket.set_subscribe(b"")?;

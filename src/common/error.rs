@@ -50,3 +50,15 @@ impl From<config::ConfigError> for RouterError {
         RouterError::ConfigError(err)
     }
 }
+
+impl From<base64::DecodeError> for RouterError {
+    fn from(err: base64::DecodeError) -> Self {
+        RouterError::SystemError(err.to_string())
+    }
+}
+
+impl From<std::str::Utf8Error> for RouterError {
+    fn from(err: std::str::Utf8Error) -> Self {
+        RouterError::SystemError(err.to_string())
+    }
+}

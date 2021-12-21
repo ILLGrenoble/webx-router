@@ -16,7 +16,7 @@ impl EventBus {
 
     pub fn new(context: zmq::Context) -> Self {
         Self {
-            context: context
+            context
         }
     }
 

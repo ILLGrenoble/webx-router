@@ -31,7 +31,7 @@ impl ClientConnector {
             ];
 
             // Poll both sockets
-            if let Ok(_) = zmq::poll(&mut items, -1) {
+            if zmq::poll(&mut items, -1).is_ok() {
                 // Check for event bus messages
                 if items[0].is_readable() {
                     if let Err(error) = event_bus_sub_socket.recv(&mut msg, 0) {
