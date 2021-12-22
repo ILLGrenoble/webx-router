@@ -8,6 +8,7 @@ use std::vec::Vec;
 pub struct SessionProxy {
     context: zmq::Context,
     service: SessionService,
+    is_running: bool,
 }
 
 impl SessionProxy {
@@ -15,7 +16,8 @@ impl SessionProxy {
     pub fn new(context: zmq::Context) -> Self {
         Self {
             context,
-            service: SessionService::new()
+            service: SessionService::new(),
+            is_running: false,
         }
     }
 
@@ -26,90 +28,23 @@ impl SessionProxy {
 
         let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC])?;
 
-        let mut is_running = true;
-        while is_running {
-            let mut msg = zmq::Message::new();
+        let mut items = [
+            event_bus_sub_socket.as_poll_item(zmq::POLLIN),
+            secure_rep_socket.as_poll_item(zmq::POLLIN),
+        ];
 
-            let mut items = [
-                event_bus_sub_socket.as_poll_item(zmq::POLLIN),
-                secure_rep_socket.as_poll_item(zmq::POLLIN),
-            ];
-
+        self.is_running = true;
+        while self.is_running {
             // Poll both sockets
             if zmq::poll(&mut items, -1).is_ok() {
                 // Check for event bus messages
                 if items[0].is_readable() {
-                    if let Err(error) = event_bus_sub_socket.recv(&mut msg, 0) {
-                        error!("Failed to receive event bus message: {}", error);
-
-                    } else {
-                        let event = msg.as_str().unwrap();
-                        if event == APPLICATION_SHUTDOWN_COMMAND {
-                            is_running = false;
-
-                            // Close all sessions gracefully
-                            self.service.stop_sessions();
-
-                        } else {
-                            warn!("Got unknown event bus command: {}", event);
-                        }
-                    }
+                    self.read_event_bus(&event_bus_sub_socket);
                 }
 
                 // Check for session REQ messages (if running)
-                if items[1].is_readable() && is_running {
-                    // Get message on REQ socket
-                    let mut send_empty = true;
-                    if let Err(error) = secure_rep_socket.recv(&mut msg, 0) {
-                        error!("Failed to received message on session request socket: {}", error);
-
-                    } else {
-                        // Decode message
-                        let message_text = msg.as_str().unwrap();
-
-                        if message_text == "ping" {
-                            // Ping response
-                            if let Err(error) = secure_rep_socket.send("pong", 0) {
-                                error!("Failed to send pong message: {}", error);
-                            }
-                            send_empty = false;
-
-                        } else {
-                            let session_parameters = message_text.split(',').collect::<Vec<&str>>();
-                            if session_parameters[0] == "create" {
-                                if session_parameters.len() == 3 {
-                                    let username_base64 = session_parameters[1];
-                                    let password_base64 = session_parameters[2];
-                                    let username = self.decode_base64(username_base64)?;
-                                    let password = self.decode_base64(password_base64)?;
-
-                                    info!("Got session create command with username \"{}\" and password \"{}\"", username, password);
-
-                                    // Request session from WebX Session Manager
-                                    let message = self.create_session(settings, &username, &password);
-                                    if let Err(error) = secure_rep_socket.send(message.as_str(), 0) {
-                                        error!("Failed to send session creation response: {}", error);
-                                    }
-                                    send_empty = false;
-    
-                                } else {
-                                    error!("Got incorrect number of session create parameters. Got {}, expected 3", session_parameters.len());
-                                }
-    
-                            } else {
-                                error!("Got unknown session command");
-                            }
-                        }
-
-                        if send_empty {
-                            // If send needed then send empty message
-                            let empty_message = zmq::Message::new();
-                            if let Err(error) = secure_rep_socket.send(empty_message, 0) {
-                                error!("Failed to send empty message: {}", error);
-                            }
-                        }
-                        
-                    }
+                if items[1].is_readable() && self.is_running {
+                    self.handle_secure_request(&secure_rep_socket, settings);
                 }
             }
         }
@@ -140,6 +75,79 @@ impl SessionProxy {
         Ok(socket)
     }
 
+    fn read_event_bus(&mut self, event_bus_sub_socket: &zmq::Socket) {
+        let mut msg = zmq::Message::new();
+
+        if let Err(error) = event_bus_sub_socket.recv(&mut msg, 0) {
+            error!("Failed to receive event bus message: {}", error);
+
+        } else {
+            let event = msg.as_str().unwrap();
+            if event == APPLICATION_SHUTDOWN_COMMAND {
+                self.is_running = false;
+
+                // Close all sessions gracefully
+                self.service.stop_sessions();
+
+            } else {
+                warn!("Got unknown event bus command: {}", event);
+            }
+        }
+    }
+
+    fn handle_secure_request(&mut self, secure_rep_socket: &zmq::Socket, settings: &Settings) {
+        let mut msg = zmq::Message::new();
+
+        // Get message on REQ socket
+        if let Err(error) = secure_rep_socket.recv(&mut msg, 0) {
+            error!("Failed to received message on session request socket: {}", error);
+            return;
+        }
+
+        // Decode message
+        let mut send_empty = true;
+        let message_text = msg.as_str().unwrap();
+        let message_parts = message_text.split(',').collect::<Vec<&str>>();
+
+        if message_parts[0] == "ping" {
+            // Ping response
+            if let Err(error) = secure_rep_socket.send("pong", 0) {
+                error!("Failed to send pong message: {}", error);
+            }
+            send_empty = false;
+
+        } else if message_parts[0] == "create" {
+            match self.decode_create_command(&message_parts) {
+                Ok((username, password)) => {
+                    info!("Got session create command with username \"{}\" and password \"{}\"", username, password);
+
+                    // Request session from WebX Session Manager
+                    let message = self.create_session(settings, &username, &password);
+
+                    // Send message response
+                    if let Err(error) = secure_rep_socket.send(message.as_str(), 0) {
+                        error!("Failed to send session creation response: {}", error);
+                    }
+                    send_empty = false;
+                },
+                Err(error) => {
+                    error!("Failed to decode create command: {}", error);
+                }
+            }
+
+        } else {
+            error!("Got unknown session command");
+        }
+
+        // If send needed then send empty message
+        if send_empty {
+            let empty_message = zmq::Message::new();
+            if let Err(error) = secure_rep_socket.send(empty_message, 0) {
+                error!("Failed to send empty message: {}", error);
+            }
+        }
+    }
+
     fn create_session(&mut self, settings: &Settings, username: &str, password: &str) -> String {
         match self.service.create_session(settings, username, password, &self.context) {
             Ok(session) => format!("0,{}", session.id.to_simple()),
@@ -147,6 +155,20 @@ impl SessionProxy {
                 error!("Failed to create session for user {}: {}", username, error);
                 format!("1,{}", error)
             }
+        }
+    }
+
+    fn decode_create_command(&self, message_parts: &Vec<&str>) -> Result<(String, String)> {
+        if message_parts.len() == 3 {
+            let username_base64 = message_parts[1];
+            let password_base64 = message_parts[2];
+            let username = self.decode_base64(username_base64)?;
+            let password = self.decode_base64(password_base64)?;
+
+            Ok((username, password))
+
+        } else {
+            Err(RouterError::SessionError(format!("Incorrect number of parameters. Got {}, expected 3", message_parts.len())))
         }
     }
 
