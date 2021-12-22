@@ -3,6 +3,7 @@ use std::process;
 
 pub struct RelayInstructionProxy {
     context: zmq::Context,
+    is_running: bool,
 }
 
 impl RelayInstructionProxy {
@@ -10,10 +11,11 @@ impl RelayInstructionProxy {
     pub fn new(context: zmq::Context) -> Self {
         Self {
             context,
+            is_running: false,
         }
     }
 
-    pub fn run(&self, settings: &Settings) -> Result<()> {
+    pub fn run(&mut self, settings: &Settings) -> Result<()> {
         let transport = &settings.transport;
 
         let relay_sub_socket = self.create_relay_sub_socket(transport.ports.collector)?;
@@ -22,46 +24,23 @@ impl RelayInstructionProxy {
 
         let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC])?;
 
-        let mut is_running = true;
-        while is_running {
-            let mut msg = zmq::Message::new();
+        let mut items = [
+            event_bus_sub_socket.as_poll_item(zmq::POLLIN),
+            relay_sub_socket.as_poll_item(zmq::POLLIN),
+        ];
 
-            let mut items = [
-                event_bus_sub_socket.as_poll_item(zmq::POLLIN),
-                relay_sub_socket.as_poll_item(zmq::POLLIN),
-            ];
-
+        self.is_running = true;
+        while self.is_running {
             // Poll both sockets
             if zmq::poll(&mut items, -1).is_ok() {
                 // Check for message_bus messages
                 if items[0].is_readable() {
-                    if let Err(error) = event_bus_sub_socket.recv(&mut msg, 0) {
-                        error!("Failed to receive event bus message: {}", error);
-
-                    } else {
-                        let event = msg.as_str().unwrap();
-                        if event == APPLICATION_SHUTDOWN_COMMAND {
-                            is_running = false;
-
-                        } else {
-                            warn!("Got unknown event bus command: {}", event);
-                        }
-                    }
+                    self.read_event_bus(&event_bus_sub_socket);
                 }
 
                 // Check for relay PUB messages (if running)
-                if items[1].is_readable() && is_running {
-                    // Get message from relay publisher
-                    if let Err(error) = relay_sub_socket.recv(&mut msg, 0) {
-                        error!("Failed to received instruction from relay publisher: {}", error);
-
-                    } else {
-                        trace!("Got instruction from relay of length {}", msg.len());
-                        // Resend message on engine pub socket
-                        if let Err(error) = engine_pub_socket.send(msg, 0) {
-                            error!("Failed to send instruction to engine subscribers: {}", error);
-                        }   
-                    }
+                if items[1].is_readable() && self.is_running {
+                    self.forward_relay_instruction(&relay_sub_socket, &engine_pub_socket);
                 }
             }
         }
@@ -102,5 +81,38 @@ impl RelayInstructionProxy {
         User::change_file_permissions(path, "700")?;
 
         Ok(socket)
+    }
+
+    fn read_event_bus(&mut self, event_bus_sub_socket: &zmq::Socket) {
+        let mut msg = zmq::Message::new();
+
+        if let Err(error) = event_bus_sub_socket.recv(&mut msg, 0) {
+            error!("Failed to receive event bus message: {}", error);
+
+        } else {
+            let event = msg.as_str().unwrap();
+            if event == APPLICATION_SHUTDOWN_COMMAND {
+                self.is_running = false;
+
+            } else {
+                warn!("Got unknown event bus command: {}", event);
+            }
+        }
+    }
+
+    fn forward_relay_instruction(&self, relay_sub_socket: &zmq::Socket, engine_pub_socket: &zmq::Socket) {
+        let mut msg = zmq::Message::new();
+
+        // Get message from relay publisher
+        if let Err(error) = relay_sub_socket.recv(&mut msg, 0) {
+            error!("Failed to received instruction from relay publisher: {}", error);
+
+        } else {
+            trace!("Got instruction from relay of length {}", msg.len());
+            // Resend message on engine pub socket
+            if let Err(error) = engine_pub_socket.send(msg, 0) {
+                error!("Failed to send instruction to engine subscribers: {}", error);
+            }   
+        }
     }
 }
