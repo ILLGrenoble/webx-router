@@ -7,8 +7,10 @@ use serde::{Deserialize, Serialize};
 enum Request {
     #[serde(rename = "login")]
     Login { username: String, password: String },
+    
     #[serde(rename = "who")]
     Who,
+
     #[serde(rename = "logout")]
     Logout { id: u32 },
 }
@@ -18,6 +20,15 @@ enum Request {
 enum Response {
     #[serde(rename = "login")]
     Login { process_id: u32, display_id: String, uid: u32, username: String, xauthority_file_path: String },
+
+    // #[serde(rename = "who")]
+    // Who { sessions: Vec<Session> },
+
+    #[serde(rename = "error")]
+    Error { message: String },
+
+    #[serde(rename = "logout")]
+    Logout
 }
 
 pub struct SessionManagerResponse {
@@ -93,11 +104,20 @@ impl SesmanConnector {
                 match serde_json::from_str::<Response>(&response_message) {
                     Ok(response) => match response {
                         Response::Login { username, display_id, xauthority_file_path, .. } => {
+                            debug!("X11 session request successful, got display Id: {}", &display_id);
                             Ok(SessionManagerResponse {
                                 username,
                                 display_id,
                                 xauthority_file_path,
                             })
+                        },
+                        Response::Error { message } => {
+                            debug!("X11 session request failed, got error: {}", &message);
+                            Err(RouterError::SessionError(format!("Failed to login to WebX Session Manager: {}", message)))
+                        },
+                        _ => {
+                            debug!("X11 session request return unknown response");
+                            Err(RouterError::SessionError("Unkown response returned by WebX Session Manager".to_string()))
                         }
                     },
                     Err(error) => {
