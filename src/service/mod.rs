@@ -1,5 +1,7 @@
 pub use session_service::SessionService;
-pub use session_connector::SessionConnector;
+pub use engine_validator::EngineValidator;
+pub use sesman_connector::SesmanConnector;
 
 mod session_service;
-mod session_connector;
+mod engine_validator;
+mod sesman_connector;

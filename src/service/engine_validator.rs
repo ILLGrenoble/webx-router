@@ -1,10 +1,10 @@
 use crate::common::*;
 
-pub struct SessionConnector {
+pub struct EngineValidator {
     context: zmq::Context,
 }
 
-impl SessionConnector {
+impl EngineValidator {
 
     pub fn new(context: zmq::Context) -> Self {
         Self {
@@ -50,7 +50,7 @@ impl SessionConnector {
 
         let address = format!("ipc://{}", path);
         match socket.connect(address.as_str()) {
-            Ok(_) => debug!("Session Connector connected to {}", address),
+            Ok(_) => debug!("Engine Validator connected to {}", address),
             Err(error) => return Err(RouterError::TransportError(format!("Failed to connect REQ socket to {}: {}", address, error)))
         }
 
@@ -60,8 +60,8 @@ impl SessionConnector {
     fn disconnect_req_socket(&self, socket: &zmq::Socket, path: &str) {
         let address = format!("ipc://{}", path);
         match socket.disconnect(&address) {
-            Ok(_) => debug!("Disconnected from Session Connector socket at {}:", path),
-            Err(error) => warn!("Failed to disconnect from Session Connector socket at {}: {}", path, error)
+            Ok(_) => debug!("Disconnected from Engine Validator socket at {}:", path),
+            Err(error) => warn!("Failed to disconnect from Engine Validator socket at {}: {}", path, error)
         }
     }
 }

@@ -1,5 +1,5 @@
 use crate::common::*;
-use crate::service::SessionConnector;
+use crate::service::{EngineValidator, SesmanConnector};
 
 use uuid::Uuid;
 use std::process::{Command, Child, Stdio};
@@ -29,14 +29,24 @@ struct SessionManagerResponse {
 
 pub struct SessionService {
     sessions: Vec<Session>,
+    sesman_connector: SesmanConnector,
 }
 
 impl SessionService {
 
-    pub fn new() -> Self {
+    pub fn new(context: zmq::Context) -> Self {
         Self {
             sessions: Vec::new(),
+            sesman_connector: SesmanConnector::new(context),
         }
+    }
+
+    pub fn connect_to_sesman(&mut self, settings: &Settings) -> Result<()> {
+        self.sesman_connector.open(&settings.transport.ipc.sesman_connector)
+    }
+
+    pub fn disconnect_from_sesman(&mut self) {
+        self.sesman_connector.close();
     }
 
     pub fn create_session(&mut self, settings: &Settings, username: &str, password: &str, context: &zmq::Context) -> Result<&Session> {
@@ -126,6 +136,8 @@ impl SessionService {
         // Fake slow creation
         // thread::sleep(time::Duration::from_millis(2000));
 
+        // let _response = self.sesman_connector.get_authenticated_x11_session(username, password);
+
         Ok(SessionManagerResponse {
             username: username.to_string(),
             display_id: ":0".to_string(),
@@ -188,11 +200,11 @@ impl SessionService {
 
     fn validate_engine(&self, engine: &Engine, context: &zmq::Context) -> Result<()> {
         // Verify session is running
-        let session_connector = SessionConnector::new(context.clone());
+        let engine_validator = EngineValidator::new(context.clone());
         let mut retry = 3;
         let mut connection_error = "".to_string();
         while retry > 0 {
-            match session_connector.validate_connection(&engine.ipc) {
+            match engine_validator.validate_connection(&engine.ipc) {
                 Ok(_) => return Ok(()),
                 Err(error) => {
                     connection_error = error.to_string();

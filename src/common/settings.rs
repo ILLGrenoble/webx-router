@@ -21,6 +21,7 @@ pub struct IPCSettings {
     pub message_proxy: String,
     pub instruction_proxy: String,
     pub engine_connector_root: String,
+    pub sesman_connector: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
