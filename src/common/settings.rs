@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use std::fs;
+use std::path::Path;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct PortSettings {
@@ -50,12 +51,16 @@ pub struct Settings {
     pub engine: EngineSettings
 }
 
+static DEFAULT_CONFIG_PATHS: [&str; 2] = ["/etc/webx/webx-router-config.yml", "./config.yml"];
+
 impl Settings {
-    pub fn new() -> Result<Self, config::ConfigError> {
+    pub fn new(config_path: &str) -> Result<Self, config::ConfigError> {
+
+        let config_path = Settings::get_config_path(config_path);
 
         let mut settings_raw = config::Config::default();
 
-        settings_raw.merge(config::File::new("config.yml", config::FileFormat::Yaml))?;
+        settings_raw.merge(config::File::new(config_path, config::FileFormat::Yaml))?;
         settings_raw.merge(config::Environment::with_prefix("WEBX_ROUTER").separator("_"))?;
 
         settings_raw.try_into()
@@ -77,5 +82,16 @@ impl Settings {
         }
 
         true
+    }
+
+    fn get_config_path(config_path: &str) -> &str {
+        if config_path == "" {
+            for path in DEFAULT_CONFIG_PATHS.iter() {
+                if Path::new(path).exists() {
+                    return path;
+                }
+            }
+        }
+        return config_path;
     }
 }

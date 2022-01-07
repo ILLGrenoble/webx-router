@@ -5,6 +5,7 @@ extern crate dotenv;
 use crate::app::Application;
 use crate::common::Settings;
 
+use structopt::StructOpt;
 use env_logger::Env;
 use dotenv::dotenv;
 use std::process;
@@ -14,10 +15,19 @@ mod common;
 mod service;
 mod router;
 
+#[derive(StructOpt, Debug)]
+#[structopt(name = "webx-router")]
+struct Opt {
+    /// Config path
+    #[structopt(short, long, default_value = "")]
+    config: String,
+}
+
 fn main() {
     dotenv().ok();
-    
-    let mut settings = Settings::new().expect("Loaded settings");
+    let opt = Opt::from_args();
+
+    let mut settings = Settings::new(&opt.config).expect("Loaded settings");
 
     let env = Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, &settings.logging);
     env_logger::init_from_env(env);
