@@ -1,5 +1,31 @@
 use crate::common::*;
 
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "request", content = "content")]
+enum Request {
+    #[serde(rename = "login")]
+    Login { username: String, password: String },
+    #[serde(rename = "who")]
+    Who,
+    #[serde(rename = "logout")]
+    Logout { id: u32 },
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "response", content = "content")]
+enum Response {
+    #[serde(rename = "login")]
+    Login { process_id: u32, display_id: String, uid: u32, username: String, xauthority_file_path: String },
+}
+
+pub struct SessionManagerResponse {
+    pub username: String,
+    pub display_id: String,
+    pub xauthority_file_path: String,
+}
+
 pub struct SesmanConnector {
     context: zmq::Context,
     socket: Option<zmq::Socket>,
@@ -40,12 +66,16 @@ impl SesmanConnector {
         }
     }
 
-    pub fn get_authenticated_x11_session(&self, _username: &str, _password: &str) -> Result<()> {
+    pub fn get_authenticated_x11_session(&self, username: &str, password: &str) -> Result<SessionManagerResponse> {
         match &self.socket {
             Some(socket) => {
+                // Create the requet
+                let request = Request::Login{username: username.to_string(), password: password.to_string()};
+                let request_message = serde_json::to_string(&request)?;
+
                 // Send x11 session request
                 debug!("Sending X11 session request");
-                if let Err(error) = socket.send("", 0) {
+                if let Err(error) = socket.send(&request_message, 0) {
                     error!("Failed to send X11 session request: {}", error);
                     return Err(RouterError::TransportError("Failed to send X11 session request".to_string()));
                 }
@@ -54,14 +84,27 @@ impl SesmanConnector {
                 let mut response = zmq::Message::new();
                 if let Err(error) = socket.recv(&mut response, 0) {
                     error!("Failed to receive response to X11 session request: {}", error);
-                    return Err(RouterError::TransportError("Failed to received X11 session request response".to_string()));
+                    return Err(RouterError::TransportError("Failed to receive X11 session request response".to_string()));
                 }
 
+                let response_message = response.as_str().unwrap();
+                debug!("Received X11 session request response: {}", &response_message);
 
-                debug!("Received X11 session request response");
-
-                Ok(())
-
+                match serde_json::from_str::<Response>(&response_message) {
+                    Ok(response) => match response {
+                        Response::Login { username, display_id, xauthority_file_path, .. } => {
+                            Ok(SessionManagerResponse {
+                                username,
+                                display_id,
+                                xauthority_file_path,
+                            })
+                        }
+                    },
+                    Err(error) => {
+                        error!("Failed to unserialise WebX Session Manager response: {}", error);
+                        Err(RouterError::SessionError("Failed to unserialise WebX Session Manager response".to_string()))
+                    },
+                }
             },
             None => {
                 Err(RouterError::SessionError("Not connected to WebX Session Manager".to_string()))
@@ -90,4 +133,5 @@ impl SesmanConnector {
             Err(error) => warn!("Failed to disconnect from Sesman Connector socket at {}: {}", path, error)
         }
     }
+
 }

@@ -62,3 +62,9 @@ impl From<std::str::Utf8Error> for RouterError {
         RouterError::SystemError(err.to_string())
     }
 }
+
+impl From<serde_json::Error> for RouterError {
+    fn from(err: serde_json::Error) -> Self {
+        RouterError::SystemError(err.to_string())
+    }
+}

@@ -1,5 +1,5 @@
 use crate::common::*;
-use crate::service::{EngineValidator, SesmanConnector};
+use crate::service::{EngineValidator, SesmanConnector, SessionManagerResponse};
 
 use uuid::Uuid;
 use std::process::{Command, Child, Stdio};
@@ -16,15 +16,9 @@ pub struct Engine {
 pub struct Session {
     pub id: Uuid,
     pub display_id: String,
-    pub xauth_path: String,
+    pub xauthority_file_path: String,
     pub username: String,
     pub engine: Engine,
-}
-
-struct SessionManagerResponse {
-    username: String,
-    display_id: String,
-    xauth_path: String,
 }
 
 pub struct SessionService {
@@ -69,7 +63,7 @@ impl SessionService {
             let session_id = Uuid::new_v4();
 
             // Spawn a new WebX Engine
-            let engine = self.spawn_engine(&session_id, &display_id, &ses_man_response.xauth_path, settings)?;
+            let engine = self.spawn_engine(&session_id, &display_id, &ses_man_response.xauthority_file_path, settings)?;
 
             // Validate that the engine is running
             if let Err(error) = self.validate_engine(&engine, context) {
@@ -79,7 +73,7 @@ impl SessionService {
             let session = Session {
                 id: session_id,
                 display_id: display_id.clone(),
-                xauth_path: ses_man_response.xauth_path,
+                xauthority_file_path: ses_man_response.xauthority_file_path,
                 username: username.to_string(),
                 engine
             };
@@ -125,27 +119,16 @@ impl SessionService {
         Ok(SessionManagerResponse {
             username,
             display_id: display.to_string(),
-            xauth_path: "".to_string(),
+            xauthority_file_path: "".to_string(),
         })
     }
 
     fn request_authenticated_x11_display(&self, username: &str, password: &str) -> Result<SessionManagerResponse> {
-        // Web service call to WebX Session Manager
-        // TODO
-
-        // Fake slow creation
-        // thread::sleep(time::Duration::from_millis(2000));
-
-        // let _response = self.sesman_connector.get_authenticated_x11_session(username, password);
-
-        Ok(SessionManagerResponse {
-            username: username.to_string(),
-            display_id: ":0".to_string(),
-            xauth_path: "".to_string(),
-        })
+        // Call to WebX Session Manager
+        self.sesman_connector.get_authenticated_x11_session(username, password)
     }
 
-    fn spawn_engine(&self, session_uuid: &Uuid, display: &str, xauth_path: &str, settings: &Settings) -> Result<Engine> {
+    fn spawn_engine(&self, session_uuid: &Uuid, display: &str, xauthority_file_path: &str, settings: &Settings) -> Result<Engine> {
         let engine_path = &settings.engine.path;
         let engine_logdir = &settings.engine.logdir;
         let message_proxy_path = &settings.transport.ipc.message_proxy;
@@ -183,7 +166,7 @@ impl SessionService {
         if settings.sesman.enabled {
             debug!("Launching WebX Engine \"{}\" on display {}", engine_path, display);
             command
-                .env("XAUTHORITY", xauth_path);
+                .env("XAUTHORITY", xauthority_file_path);
         
         } else {
             debug!("Launching WebX Engine \"{}\" on display {}", engine_path, display);

@@ -9,7 +9,7 @@ transport:
     message_proxy: "/tmp/webx-router-message-proxy.ipc"
     instruction_proxy: "/tmp/webx-router-instruction-proxy.ipc"
     engine_connector_root: "/tmp/webx-engine-session-connector"
-    sesman_connector: "/tmp/webx-sesman.ipc"
+    sesman_connector: "/tmp/webx-session-manager.ipc"
   encryption:
     public: ""
     private: ""
