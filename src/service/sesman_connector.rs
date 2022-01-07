@@ -16,13 +16,22 @@ enum Request {
 }
 
 #[derive(Serialize, Deserialize)]
+struct Session {
+    username: String,
+    uid: u32,
+    display_id: String,
+    process_id: u32,
+    xauthority_file_path: String,
+}
+
+#[derive(Serialize, Deserialize)]
 #[serde(tag = "response", content = "content")]
 enum Response {
     #[serde(rename = "login")]
-    Login { process_id: u32, display_id: String, uid: u32, username: String, xauthority_file_path: String },
+    Login(Session),
 
-    // #[serde(rename = "who")]
-    // Who { sessions: Vec<Session> },
+    #[serde(rename = "who")]
+    Who { sessions: Vec<Session> },
 
     #[serde(rename = "error")]
     Error { message: String },
@@ -103,12 +112,12 @@ impl SesmanConnector {
 
                 match serde_json::from_str::<Response>(&response_message) {
                     Ok(response) => match response {
-                        Response::Login { username, display_id, xauthority_file_path, .. } => {
-                            debug!("X11 session request successful, got display Id: {}", &display_id);
+                        Response::Login(session) => {
+                            debug!("X11 session request successful, got display Id: {}", &session.display_id);
                             Ok(SessionManagerResponse {
-                                username,
-                                display_id,
-                                xauthority_file_path,
+                                username: session.username,
+                                display_id: session.display_id,
+                                xauthority_file_path: session.xauthority_file_path,
                             })
                         },
                         Response::Error { message } => {
