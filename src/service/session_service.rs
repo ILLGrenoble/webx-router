@@ -36,7 +36,13 @@ impl SessionService {
     }
 
     pub fn connect_to_sesman(&mut self, settings: &Settings) -> Result<()> {
-        self.sesman_connector.open(&settings.transport.ipc.sesman_connector)
+        if settings.sesman.enabled {
+            self.sesman_connector.open(&settings.transport.ipc.sesman_connector)
+        
+        } else {
+            warn!("WebX Session Manager is disabled");
+            Ok(())
+        }
     }
 
     pub fn disconnect_from_sesman(&mut self) {
