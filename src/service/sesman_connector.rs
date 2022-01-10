@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "request", content = "content")]
-enum Request {
+enum SessionManagerRequest {
     #[serde(rename = "login")]
     Login { username: String, password: String },
     
@@ -16,7 +16,7 @@ enum Request {
 }
 
 #[derive(Serialize, Deserialize)]
-struct Session {
+struct SessionManagerSession {
     username: String,
     uid: u32,
     display_id: String,
@@ -26,24 +26,18 @@ struct Session {
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "response", content = "content")]
-enum Response {
+enum SessionManagerResponse {
     #[serde(rename = "login")]
-    Login(Session),
+    Login(SessionManagerSession),
 
     #[serde(rename = "who")]
-    Who { sessions: Vec<Session> },
+    Who { sessions: Vec<SessionManagerSession> },
 
     #[serde(rename = "error")]
     Error { message: String },
 
     #[serde(rename = "logout")]
     Logout
-}
-
-pub struct SessionManagerResponse {
-    pub username: String,
-    pub display_id: String,
-    pub xauthority_file_path: String,
 }
 
 pub struct SesmanConnector {
@@ -86,11 +80,11 @@ impl SesmanConnector {
         }
     }
 
-    pub fn get_authenticated_x11_session(&self, username: &str, password: &str) -> Result<SessionManagerResponse> {
+    pub fn get_authenticated_x11_session(&self, username: &str, password: &str) -> Result<X11Session> {
         match &self.socket {
             Some(socket) => {
                 // Create the requet
-                let request = Request::Login{username: username.to_string(), password: password.to_string()};
+                let request = SessionManagerRequest::Login{username: username.to_string(), password: password.to_string()};
                 let request_message = serde_json::to_string(&request)?;
 
                 // Send x11 session request
@@ -110,17 +104,13 @@ impl SesmanConnector {
                 let response_message = response.as_str().unwrap();
                 debug!("Received X11 session request response: {}", &response_message);
 
-                match serde_json::from_str::<Response>(&response_message) {
+                match serde_json::from_str::<SessionManagerResponse>(&response_message) {
                     Ok(response) => match response {
-                        Response::Login(session) => {
+                        SessionManagerResponse::Login(session) => {
                             debug!("X11 session request successful, got display Id: {}", &session.display_id);
-                            Ok(SessionManagerResponse {
-                                username: session.username,
-                                display_id: session.display_id,
-                                xauthority_file_path: session.xauthority_file_path,
-                            })
+                            Ok(X11Session::new(session.username, session.display_id, session.xauthority_file_path))
                         },
-                        Response::Error { message } => {
+                        SessionManagerResponse::Error { message } => {
                             debug!("X11 session request failed, got error: {}", &message);
                             Err(RouterError::SessionError(format!("Failed to login to WebX Session Manager: {}", message)))
                         },

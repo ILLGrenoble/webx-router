@@ -78,7 +78,7 @@ impl RelayInstructionProxy {
         }
 
         // Make sure socket is accessible only to current user
-        User::change_file_permissions(path, "700")?;
+        System::chmod(path, 0o700)?;
 
         Ok(socket)
     }

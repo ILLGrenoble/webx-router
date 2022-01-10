@@ -124,7 +124,7 @@ impl SessionProxy {
         } else if message_parts[0] == "create" {
             match self.decode_create_command(&message_parts) {
                 Ok((username, password)) => {
-                    info!("Got session create command with username \"{}\" and password \"{}\"", username, password);
+                    info!("Got session create command for user \"{}\"", username);
 
                     // Request session from WebX Session Manager
                     let message = self.create_session(settings, &username, &password);
@@ -155,7 +155,7 @@ impl SessionProxy {
 
     fn create_session(&mut self, settings: &Settings, username: &str, password: &str) -> String {
         match self.service.create_session(settings, username, password, &self.context) {
-            Ok(session) => format!("0,{}", session.id.to_simple()),
+            Ok(session) => format!("0,{}", session.id().to_simple()),
             Err(error) => {
                 error!("Failed to create session for user {}: {}", username, error);
                 format!("1,{}", error)

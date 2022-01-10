@@ -1,25 +1,12 @@
 use crate::common::*;
-use crate::service::{EngineValidator, SesmanConnector, SessionManagerResponse};
+use crate::service::{EngineValidator, SesmanConnector};
 
 use uuid::Uuid;
-use std::process::{Command, Child, Stdio};
+use std::process::{Command, Stdio};
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::fs::File;
 
 use signal_child::Signalable;
-
-pub struct Engine {
-    process: Child,
-    pub ipc: String, // specific req-rep address used to verify that the engine is running?
-}
-
-pub struct Session {
-    pub id: Uuid,
-    pub display_id: String,
-    pub xauthority_file_path: String,
-    pub username: String,
-    pub engine: Engine,
-}
 
 pub struct SessionService {
     sessions: Vec<Session>,
@@ -51,46 +38,41 @@ impl SessionService {
 
     pub fn create_session(&mut self, settings: &Settings, username: &str, password: &str, context: &zmq::Context) -> Result<&Session> {
         // See if we are using the session manager
-        let ses_man_response;
+        let x11_session;
         if settings.sesman.enabled {
             // Request display/session Id from WebX Session Manager
-            ses_man_response = self.request_authenticated_x11_display(username, password)?;
-            debug!("Got response for session manager: user \"{}\" has display on \"{}\"", ses_man_response.username, ses_man_response.display_id);
+            x11_session = self.request_authenticated_x11_display(username, password)?;
+            debug!("Got response for session manager: user \"{}\" has display on \"{}\"", x11_session.username(), x11_session.display_id());
         
         } else {
-            ses_man_response = self.get_fallback_x11_display(settings)?;
+            x11_session = self.get_fallback_x11_display(settings)?;
         }
-        let display_id = ses_man_response.display_id;
+
+        let display_id = x11_session.display_id().to_string();
 
         // See if session exists already: create if not
-        if self.get_session(username, &display_id).is_none() {
-            debug!("Creating session for user \"{}\" on display {}", username, display_id);
+        if self.get_session(username, x11_session.display_id()).is_none() {
+            debug!("Creating session for user \"{}\" on display {}", username, &display_id);
             // Create a session Id
             let session_id = Uuid::new_v4();
 
             // Spawn a new WebX Engine
-            let engine = self.spawn_engine(&session_id, &display_id, &ses_man_response.xauthority_file_path, settings)?;
+            let engine = self.spawn_engine(&session_id, &x11_session, settings)?;
 
             // Validate that the engine is running
             if let Err(error) = self.validate_engine(&engine, context) {
                 error!("Failed to validate that WebX Engine is running for user {}: {}", username, error);
             }
 
-            let session = Session {
-                id: session_id,
-                display_id: display_id.clone(),
-                xauthority_file_path: ses_man_response.xauthority_file_path,
-                username: username.to_string(),
-                engine
-            };
+            let session = Session::new(session_id, x11_session, engine);
 
             // Store session
             self.sessions.push(session);
 
-            debug!("Created session {} on display {} for user \"{}\"", session_id, display_id, username);
+            debug!("Created session {} on display {} for user \"{}\"", session_id, &display_id, username);
 
         } else {
-            debug!("Session exists for user \"{}\" on display {}", username, display_id);
+            debug!("Session exists for user \"{}\" on display {}", username, &display_id);
         }
 
         // Return the session
@@ -102,13 +84,14 @@ impl SessionService {
 
     pub fn stop_sessions(&mut self) {
         for session in self.sessions.iter_mut() {
-            let engine = &mut session.engine;
-            let process = &mut engine.process;
+            let engine = session.engine();
+            let process = engine.process();
+            let process_id = { process.id() };
             match process.interrupt() {
                 Ok(_) => {
-                    debug!("Shutdown WebX Engine for {} on display {}", session.username, session.display_id);
+                    debug!("Shutdown WebX Engine for {} on display {}", session.username(), session.display_id());
                 },
-                Err(error) => error!("Failed to interrupt WebX Engine for {} running on PID {}: {}", session.username, process.id(), error),
+                Err(error) => error!("Failed to interrupt WebX Engine for {} running on PID {}: {}", session.username(), process_id, error),
             }
         }
 
@@ -116,25 +99,21 @@ impl SessionService {
     }
 
     fn get_session(&self, username: &str, display_id: &str) -> Option<&Session> {
-        self.sessions.iter().find(|&session| session.display_id == display_id && session.username == username)
+        self.sessions.iter().find(|&session| session.display_id() == display_id && session.username() == username)
     }
 
-    fn get_fallback_x11_display(&self, settings: &Settings) -> Result<SessionManagerResponse> {
-        let username = User::get_current_username()?;
+    fn get_fallback_x11_display(&self, settings: &Settings) -> Result<X11Session> {
+        let username = System::get_current_username()?;
         let display = &settings.sesman.fallback_display_id;
-        Ok(SessionManagerResponse {
-            username,
-            display_id: display.to_string(),
-            xauthority_file_path: "".to_string(),
-        })
+        Ok(X11Session::new(username, display.to_string(), "".to_string()))
     }
 
-    fn request_authenticated_x11_display(&self, username: &str, password: &str) -> Result<SessionManagerResponse> {
+    fn request_authenticated_x11_display(&self, username: &str, password: &str) -> Result<X11Session> {
         // Call to WebX Session Manager
         self.sesman_connector.get_authenticated_x11_session(username, password)
     }
 
-    fn spawn_engine(&self, session_uuid: &Uuid, display: &str, xauthority_file_path: &str, settings: &Settings) -> Result<Engine> {
+    fn spawn_engine(&self, session_uuid: &Uuid, x11_session: &X11Session, settings: &Settings) -> Result<Engine> {
         let engine_path = &settings.engine.path;
         let engine_logdir = &settings.engine.logdir;
         let message_proxy_path = &settings.transport.ipc.message_proxy;
@@ -162,7 +141,7 @@ impl SessionService {
         let mut command = Command::new(engine_path);
         command
             .stdout(file_out)
-            .env("DISPLAY", display)
+            .env("DISPLAY", x11_session.display_id())
             .env("WEBX_ENGINE_LOG", "debug")
             .env("WEBX_ENGINE_IPC_SESSION_CONNECTOR_PATH", &session_connector_path)
             .env("WEBX_ENGINE_IPC_MESSAGE_PROXY_PATH", message_proxy_path)
@@ -170,20 +149,17 @@ impl SessionService {
             .env("WEBX_ENGINE_SESSION_ID", session_id.to_string());
 
         if settings.sesman.enabled {
-            debug!("Launching WebX Engine \"{}\" on display {}", engine_path, display);
+            debug!("Launching WebX Engine \"{}\" on display {}", engine_path, x11_session.display_id());
             command
-                .env("XAUTHORITY", xauthority_file_path);
+                .env("XAUTHORITY", x11_session.xauthority_file_path());
         
         } else {
-            debug!("Launching WebX Engine \"{}\" on display {}", engine_path, display);
+            debug!("Launching WebX Engine \"{}\" on display {}", engine_path, x11_session.display_id());
         }
 
         match command.spawn() {
             Err(error) => Err(RouterError::SessionError(format!("Failed to spawn WebX Engine: {}", error))),
-            Ok(child) => Ok(Engine {
-                process: child,
-                ipc: session_connector_path
-            })
+            Ok(child) => Ok(Engine::new(child, session_connector_path))
         }
     }
 
@@ -193,7 +169,7 @@ impl SessionService {
         let mut retry = 3;
         let mut connection_error = "".to_string();
         while retry > 0 {
-            match engine_validator.validate_connection(&engine.ipc) {
+            match engine_validator.validate_connection(&engine.ipc()) {
                 Ok(_) => return Ok(()),
                 Err(error) => {
                     connection_error = error.to_string();
