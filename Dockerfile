@@ -3,7 +3,7 @@ FROM rust:1.57-slim
 WORKDIR /app
 
 RUN apt update
-RUN apt install -y libzmq3-dev pkg-config
+RUN apt install -y libzmq3-dev pkg-config dpkg-dev
 
 COPY . .
 
