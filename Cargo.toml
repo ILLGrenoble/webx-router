@@ -18,3 +18,14 @@ signal-child = "1.0.3"
 base64 = "0.13.0"
 structopt = "0.3.25"
 serde_json = "1.0.74"
+
+[package.metadata.deb]
+maintainer = "Stuart Caunt <caunt@ill.fr>"
+copyright = "2022, Institut Laue Langevin"
+license-file = ["LICENSE", "0"]
+depends = "$auto"
+section = "net"
+priority = "optional"
+assets = [
+    ["target/release/webx-router", "usr/bin/", "755"],
+]
