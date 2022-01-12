@@ -1,5 +1,8 @@
 [package]
 name = "webx-router"
+description = "The WebX Router manages multiple WebX sessions, routing requests, instructions and messages between running WebX Engines and the WebX Relay."
+readme = "README.md"
+license-file = "LICENSE"
 version = "0.1.0"
 edition = "2021"
 
@@ -23,9 +26,12 @@ serde_json = "1.0.74"
 maintainer = "Stuart Caunt <caunt@ill.fr>"
 copyright = "2022, Institut Laue Langevin"
 license-file = ["LICENSE", "0"]
+extended-description = """\
+The WebX Router manages multiple WebX sessions, routing requests, instructions and messages between running WebX Engines and the WebX Relay."""
 depends = "$auto"
 section = "net"
 priority = "optional"
 assets = [
     ["target/release/webx-router", "usr/bin/", "755"],
+    ["config.yml", "/etc/webx/webx-router-config.yml", "644"]
 ]

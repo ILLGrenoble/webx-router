@@ -1,0 +1,9 @@
+.git
+.vscode
+.idea
+.env
+.dockerignore
+.gitignore
+target
+Dockerfile
+*.deb
