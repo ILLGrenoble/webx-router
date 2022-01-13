@@ -1,0 +1,18 @@
+stages:
+  - build
+
+build:
+  stage: build
+  # only:
+  #   - dev
+  tags:
+    - debian
+    - dss
+  script:
+    - docker build -t webx-router-builder .
+    - docker create -ti --name webx-router-builder webx-router-builder bash
+    - docker cp webx-router-builder:/app/target/debian/. .
+    - docker rm -f webx-router-builder
+  artifacts:
+    paths:
+      - webx-router*.deb
