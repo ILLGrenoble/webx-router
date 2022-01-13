@@ -1,8 +1,8 @@
 stages:
-  - build
+  - build-dev
 
-build:
-  stage: build
+build-dev:
+  stage: build-dev
   # only:
   #   - dev
   tags:
@@ -13,6 +13,8 @@ build:
     - docker create -ti --name webx-router-builder webx-router-builder bash
     - docker cp webx-router-builder:/app/target/debian/. .
     - docker rm -f webx-router-builder
+    - PACKAGE_VERSION=$(shell awk -F ' = ' '$$1 ~ /version/ { gsub(/[\"]/, "", $$2); printf("%s",$$2) }' Cargo.toml)
+    - cp webx-router_${PACKAGE_VERSION}_amd64.deb webx-router_dev_amd64.deb
   artifacts:
     paths:
-      - webx-router*.deb
+      - webx-router_dev_amd64.deb
