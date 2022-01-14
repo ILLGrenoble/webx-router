@@ -14,10 +14,9 @@ pub struct SessionProxy {
 impl SessionProxy {
 
     pub fn new(context: zmq::Context) -> Self {
-        let cloned_context = context.clone();
         Self {
             context,
-            service: SessionService::new(cloned_context),
+            service: SessionService::new(),
             is_running: false,
         }
     }
@@ -28,8 +27,6 @@ impl SessionProxy {
         let secure_rep_socket = self.create_secure_rep_socket(transport.ports.session, &transport.encryption.private)?;
 
         let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC])?;
-
-        self.service.connect_to_sesman(settings)?;
 
         let mut items = [
             event_bus_sub_socket.as_poll_item(zmq::POLLIN),
@@ -51,8 +48,6 @@ impl SessionProxy {
                 }
             }
         }
-
-        self.service.disconnect_from_sesman();
 
         debug!("Stopped Session Proxy");
 

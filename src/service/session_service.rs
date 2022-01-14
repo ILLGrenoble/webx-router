@@ -10,30 +10,14 @@ use signal_child::Signalable;
 
 pub struct SessionService {
     sessions: Vec<Session>,
-    sesman_connector: SesmanConnector,
 }
 
 impl SessionService {
 
-    pub fn new(context: zmq::Context) -> Self {
+    pub fn new() -> Self {
         Self {
             sessions: Vec::new(),
-            sesman_connector: SesmanConnector::new(context),
         }
-    }
-
-    pub fn connect_to_sesman(&mut self, settings: &Settings) -> Result<()> {
-        if settings.sesman.enabled {
-            self.sesman_connector.open(&settings.transport.ipc.sesman_connector)
-        
-        } else {
-            warn!("WebX Session Manager is disabled");
-            Ok(())
-        }
-    }
-
-    pub fn disconnect_from_sesman(&mut self) {
-        self.sesman_connector.close();
     }
 
     pub fn create_session(&mut self, settings: &Settings, username: &str, password: &str, context: &zmq::Context) -> Result<&Session> {
@@ -41,7 +25,7 @@ impl SessionService {
         let x11_session;
         if settings.sesman.enabled {
             // Request display/session Id from WebX Session Manager
-            x11_session = self.request_authenticated_x11_display(username, password)?;
+            x11_session = self.request_authenticated_x11_display(username, password, context, settings)?;
             debug!("Got response for session manager: user \"{}\" has display on \"{}\"", x11_session.username(), x11_session.display_id());
         
         } else {
@@ -108,9 +92,11 @@ impl SessionService {
         Ok(X11Session::new(username, display.to_string(), "".to_string()))
     }
 
-    fn request_authenticated_x11_display(&self, username: &str, password: &str) -> Result<X11Session> {
+    fn request_authenticated_x11_display(&self, username: &str, password: &str, context: &zmq::Context, settings: &Settings) -> Result<X11Session> {
         // Call to WebX Session Manager
-        self.sesman_connector.get_authenticated_x11_session(username, password)
+        let sesman_connector = SesmanConnector::new(context.clone());
+
+        sesman_connector.get_authenticated_x11_session(username, password, &settings.transport.ipc.sesman_connector)
     }
 
     fn spawn_engine(&self, session_uuid: &Uuid, x11_session: &X11Session, settings: &Settings) -> Result<Engine> {
