@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "request", content = "content")]
 enum SessionManagerRequest {
     #[serde(rename = "login")]
-    Login { username: String, password: String },
+    Login { username: String, password: String, width: u32, height: u32 },
     
     #[serde(rename = "who")]
     Who,
@@ -17,6 +17,7 @@ enum SessionManagerRequest {
 
 #[derive(Serialize, Deserialize)]
 struct SessionManagerSession {
+    id: String,
     username: String,
     uid: u32,
     display_id: String,
@@ -52,19 +53,19 @@ impl SesmanConnector {
         }
     }
 
-    pub fn get_authenticated_x11_session(&self, username: &str, password: &str, ipc_path: &str) -> Result<X11Session> {
+    pub fn get_authenticated_x11_session(&self, username: &str, password: &str, width: u32, height: u32, ipc_path: &str) -> Result<X11Session> {
         let socket = self.create_req_socket(ipc_path)?;
 
-        let response = self.handle_sesman_request(username, password, &socket);
+        let response = self.handle_sesman_request(username, password, width, height, &socket);
 
         self.disconnect_req_socket(&socket, ipc_path);
 
         response
     }
 
-    fn handle_sesman_request(&self, username: &str, password: &str, socket: &zmq::Socket) -> Result<X11Session> {
+    fn handle_sesman_request(&self, username: &str, password: &str, width: u32, height: u32, socket: &zmq::Socket) -> Result<X11Session> {
         // Create the request
-        let request = SessionManagerRequest::Login{username: username.to_string(), password: password.to_string()};
+        let request = SessionManagerRequest::Login{username: username.to_string(), password: password.to_string(), width, height};
         let request_message = serde_json::to_string(&request)?;
 
         // Send x11 session request
@@ -89,7 +90,7 @@ impl SesmanConnector {
             Ok(response) => match response {
                 SessionManagerResponse::Login(session) => {
                     debug!("X11 session request successful, got display Id: {}", &session.display_id);
-                    Ok(X11Session::new(session.username, session.display_id, session.xauthority_file_path))
+                    Ok(X11Session::new(session.id, session.username, session.display_id, session.xauthority_file_path))
                 },
                 SessionManagerResponse::Error { message } => {
                     debug!("X11 session request failed, got error: {}", &message);

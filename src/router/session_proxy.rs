@@ -118,11 +118,11 @@ impl SessionProxy {
 
         } else if message_parts[0] == "create" {
             match self.decode_create_command(&message_parts) {
-                Ok((username, password)) => {
+                Ok((username, password, width, height)) => {
                     info!("Got session create command for user \"{}\"", username);
 
                     // Request session from WebX Session Manager
-                    let message = self.create_session(settings, &username, &password);
+                    let message = self.get_or_create_session(settings, &username, &password, width, height);
 
                     // Send message response
                     if let Err(error) = secure_rep_socket.send(message.as_str(), 0) {
@@ -148,9 +148,9 @@ impl SessionProxy {
         }
     }
 
-    fn create_session(&mut self, settings: &Settings, username: &str, password: &str) -> String {
-        match self.service.create_session(settings, username, password, &self.context) {
-            Ok(session) => format!("0,{}", session.id().to_simple()),
+    fn get_or_create_session(&mut self, settings: &Settings, username: &str, password: &str, width: u32, height: u32) -> String {
+        match self.service.get_or_create_session(settings, username, password, width, height, &self.context) {
+            Ok(session) => format!("0,{}", session.id()),
             Err(error) => {
                 error!("Failed to create session for user {}: {}", username, error);
                 format!("1,{}", error)
@@ -158,14 +158,17 @@ impl SessionProxy {
         }
     }
 
-    fn decode_create_command(&self, message_parts: &Vec<&str>) -> Result<(String, String)> {
-        if message_parts.len() == 3 {
+    fn decode_create_command(&self, message_parts: &Vec<&str>) -> Result<(String, String, u32, u32)> {
+        if message_parts.len() == 5 {
             let username_base64 = message_parts[1];
             let password_base64 = message_parts[2];
             let username = self.decode_base64(username_base64)?;
             let password = self.decode_base64(password_base64)?;
 
-            Ok((username, password))
+            let width = message_parts[3].to_string().parse::<u32>()?;
+            let height = message_parts[4].to_string().parse::<u32>()?;
+
+            Ok((username, password, width, height))
 
         } else {
             Err(RouterError::SessionError(format!("Incorrect number of parameters. Got {}, expected 3", message_parts.len())))

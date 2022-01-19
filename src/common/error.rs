@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::num::ParseIntError;
 use std::result;
 use std::fmt;
 
@@ -65,6 +66,12 @@ impl From<std::str::Utf8Error> for RouterError {
 
 impl From<serde_json::Error> for RouterError {
     fn from(err: serde_json::Error) -> Self {
+        RouterError::SystemError(err.to_string())
+    }
+}
+
+impl From<ParseIntError> for RouterError {
+    fn from(err: ParseIntError) -> Self {
         RouterError::SystemError(err.to_string())
     }
 }
