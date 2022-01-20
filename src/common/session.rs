@@ -1,3 +1,5 @@
+use std::fs;
+
 use crate::common::{Engine, X11Session};
 
 use signal_child::Signalable;
@@ -34,11 +36,21 @@ impl Session {
 
     pub fn stop(&mut self) {
         let engine = self.engine();
+        let ipc_path = engine.ipc().to_string();
+
         let process = engine.process();
         let process_id = { process.id() };
         match process.interrupt() {
             Ok(_) => {
-                debug!("Shutdown WebX Engine for {} on display {}", self.username(), self.display_id());
+                if let Err(error) = process.wait() {
+                    warn!("Failed to wait for WebX Engine for {} running on PID {} to terminate: {}", self.username(), process_id, error);
+
+                } else {
+                    debug!("Shutdown WebX Engine for {} on display {}", self.username(), self.display_id());
+
+                    // Delete the IPC socket file
+                    fs::remove_file(ipc_path).unwrap();
+                }
             },
             Err(error) => error!("Failed to interrupt WebX Engine for {} running on PID {}: {}", self.username(), process_id, error),
         }

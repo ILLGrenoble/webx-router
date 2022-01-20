@@ -21,7 +21,8 @@ struct SessionManagerSession {
     username: String,
     uid: u32,
     display_id: String,
-    process_id: u32,
+    xorg_process_id: u32,
+    window_manager_process_id: u32,
     xauthority_file_path: String,
 }
 
