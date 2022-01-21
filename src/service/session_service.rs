@@ -56,12 +56,14 @@ impl SessionService {
         // Spawn a new WebX Engine
         let engine = self.spawn_engine(&x11_session, settings)?;
 
-        // Validate that the engine is running
-        if let Err(error) = self.validate_engine(&engine, context) {
-            error!("Failed to validate that WebX Engine is running for user {}: {}", &x11_session.username(), error);
-        }
+        let mut session = Session::new(x11_session, engine);
 
-        let session = Session::new(x11_session, engine);
+        // Validate that the engine is running
+        if let Err(error) = self.validate_engine(session.engine(), context) {
+            // Make sure the engine process has stopped
+            session.stop();
+            return Err(RouterError::SessionError(format!("Failed to validate that WebX Engine is running for user {}: {}", session.username(), error)));
+        }
 
         debug!("Created session {} on display {} for user \"{}\"", &session.id(), &session.display_id(), &session.username());
 

@@ -30,15 +30,14 @@ impl Session {
         return &self.x11_session.username();
     }
 
-    pub fn engine(&mut self) -> &mut Engine {
-        return &mut self.engine;
+    pub fn engine(&self) -> &Engine {
+        return &self.engine;
     }
 
     pub fn stop(&mut self) {
-        let engine = self.engine();
-        let ipc_path = engine.ipc().to_string();
+        let ipc_path = self.engine.ipc().to_string();
 
-        let process = engine.process();
+        let process = self.engine.process();
         let process_id = { process.id() };
         match process.interrupt() {
             Ok(_) => {
