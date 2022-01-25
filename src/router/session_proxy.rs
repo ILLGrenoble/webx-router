@@ -110,9 +110,23 @@ impl SessionProxy {
         let message_parts = message_text.split(',').collect::<Vec<&str>>();
 
         if message_parts[0] == "ping" {
-            // Ping response
-            if let Err(error) = secure_rep_socket.send("pong", 0) {
-                error!("Failed to send pong message: {}", error);
+
+            // Check for router or engine ping
+            if message_parts.len() == 1 {
+                // Ping response for router
+                if let Err(error) = secure_rep_socket.send("pong", 0) {
+                    error!("Failed to send pong message: {}", error);
+                }
+
+            } else {
+                let session_id = message_parts[1];
+                debug!("Got ping for session {}", session_id);
+
+                // Ping the session and get a string response
+                let ping_response = self.ping_session(&session_id);
+                if let Err(error) = secure_rep_socket.send(ping_response.as_str(), 0) {
+                    error!("Failed to send session ping message: {}", error);
+                }
             }
             send_empty = false;
 
@@ -154,6 +168,16 @@ impl SessionProxy {
             Err(error) => {
                 error!("Failed to create session for user {}: {}", username, error);
                 format!("1,{}", error)
+            }
+        }
+    }
+
+    fn ping_session(&mut self, session_id: &str) -> String {
+        match self.service.ping_session(session_id, &self.context) {
+            Ok(_) => format!("pong,{}", session_id),
+            Err(error) => {
+                error!("Failed to ping session with id {}: {}", session_id, error);
+                format!("pang,{},{}", session_id, error)
             }
         }
     }

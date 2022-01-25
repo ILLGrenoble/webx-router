@@ -23,7 +23,7 @@ impl EngineValidator {
             return Err(RouterError::TransportError("Failed to send ping request".to_string()));
         }
 
-        debug!("Waiting for pong on WebX Engine at {}", path);
+        trace!("Waiting for pong on WebX Engine at {}", path);
         let mut response = zmq::Message::new();
         if let Err(error) = req_socket.recv(&mut response, 0) {
             error!("Failed to receive response to ping on {}: {}", path, error);
@@ -50,7 +50,7 @@ impl EngineValidator {
 
         let address = format!("ipc://{}", path);
         match socket.connect(address.as_str()) {
-            Ok(_) => debug!("Engine Validator connected to {}", address),
+            Ok(_) => trace!("Engine Validator connected to {}", address),
             Err(error) => return Err(RouterError::TransportError(format!("Failed to connect REQ socket to {}: {}", address, error)))
         }
 
@@ -60,7 +60,7 @@ impl EngineValidator {
     fn disconnect_req_socket(&self, socket: &zmq::Socket, path: &str) {
         let address = format!("ipc://{}", path);
         match socket.disconnect(&address) {
-            Ok(_) => debug!("Disconnected from Engine Validator socket at {}:", path),
+            Ok(_) => trace!("Disconnected from Engine Validator socket at {}:", path),
             Err(error) => warn!("Failed to disconnect from Engine Validator socket at {}: {}", path, error)
         }
     }

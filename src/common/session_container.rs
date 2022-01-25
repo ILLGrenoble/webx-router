@@ -20,6 +20,10 @@ impl SessionContainer {
         self.sessions.iter().find(|session| session.username() == username)
     }
 
+    pub fn get_session_by_session_id(&self, session_id: &str) -> Option<&Session> {
+        self.sessions.iter().find(|session| session.id() == session_id)
+    }
+
     pub fn get_existing_session(&self, x11_session: &X11Session) -> Option<&Session> {
         self.sessions.iter().find(|session| session.username() == x11_session.username() && session.id() == x11_session.session_id() && session.display_id() == x11_session.display_id())
     }
@@ -38,6 +42,16 @@ impl SessionContainer {
         }
 
         if let Some(index) = self.sessions.iter().position(|a_session| a_session.username() == username) {
+            self.sessions.remove(index);        
+        }
+    }
+
+    pub fn remove_previous_session_with_id(&mut self, session_id: &str) {
+        if let Some(session) = self.sessions.iter_mut().find(|session| session.id() == session_id) {
+            session.stop();
+        }
+
+        if let Some(index) = self.sessions.iter().position(|a_session| a_session.id() == session_id) {
             self.sessions.remove(index);        
         }
     }

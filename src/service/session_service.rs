@@ -50,6 +50,22 @@ impl SessionService {
         };
     }
 
+    pub fn ping_session(&mut self, session_id: &str, context: &zmq::Context) -> Result<()> {
+        if let Some(session) = self.session_container.get_session_by_session_id(session_id) {
+            if let Err(error) =  self.validate_engine(session.engine(), context, 1) {
+                // Delete session
+                self.session_container.remove_previous_session_with_id(session_id);
+                return Err(error);
+            }
+
+        } else {
+            return Err(RouterError::SessionError(format!("Could not retrieve Session with ID \"{}\"", session_id)));
+        }
+
+        // All good
+        Ok(())
+    }
+
     fn create_session(&mut self, x11_session: X11Session, settings: &Settings, context: &zmq::Context)  -> Result<()> {
         debug!("Creating session for user \"{}\" on display {}", &x11_session.username(), &x11_session.display_id());
 
@@ -59,7 +75,7 @@ impl SessionService {
         let mut session = Session::new(x11_session, engine);
 
         // Validate that the engine is running
-        if let Err(error) = self.validate_engine(session.engine(), context) {
+        if let Err(error) = self.validate_engine(session.engine(), context, 3) {
             // Make sure the engine process has stopped
             session.stop();
             return Err(RouterError::SessionError(format!("Failed to validate that WebX Engine is running for user {}: {}", session.username(), error)));
@@ -135,17 +151,16 @@ impl SessionService {
         }
     }
 
-    fn validate_engine(&self, engine: &Engine, context: &zmq::Context) -> Result<()> {
+    fn validate_engine(&self, engine: &Engine, context: &zmq::Context, mut tries: i32) -> Result<()> {
         // Verify session is running
         let engine_validator = EngineValidator::new(context.clone());
-        let mut retry = 3;
         let mut connection_error = "".to_string();
-        while retry > 0 {
+        while tries > 0 {
             match engine_validator.validate_connection(&engine.ipc()) {
                 Ok(_) => return Ok(()),
                 Err(error) => {
                     connection_error = error.to_string();
-                    retry -= 1;
+                    tries -= 1;
                 }
             }
         }
