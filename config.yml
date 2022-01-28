@@ -17,5 +17,5 @@ sesman:
   enabled: true
   fallback_display_id: ":0"
 engine:
-  path: ""
+  path: /usr/bin/webx-engine
   logdir: /var/log/webx
