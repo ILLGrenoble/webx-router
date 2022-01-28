@@ -1,5 +1,6 @@
 stages:
   - build-dev
+  - deploy-dev
 
 build-dev:
   stage: build-dev
@@ -18,3 +19,15 @@ build-dev:
   artifacts:
     paths:
       - webx-router_dev_amd64.deb
+    expire_in: 1 week
+
+deploy-dev:
+  stage: deploy-dev
+  # only:
+  #   - dev
+  tags:
+    - debian
+    - dss
+  script:
+    - scp webx-router_dev_amd64.deb webx@webx-dev.ill.fr:/data/deb/
+    - ssh webx@webx-dev.ill.fr "cd /data/apps/webx-deploy; git pull --rebase origin dev; ./deploy-deb.sh"
