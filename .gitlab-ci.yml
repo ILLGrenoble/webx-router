@@ -30,4 +30,5 @@ deploy-dev:
     - dss
   script:
     - scp webx-router_dev_amd64.deb webx@webx-dev.ill.fr:/data/deb/
-    - ssh webx@webx-dev.ill.fr "cd /data/apps/webx-deploy; git pull --rebase origin dev; ./deploy-deb.sh"
+    - ssh webx@webx-dev.ill.fr "cd /data/apps/webx-deploy; git pull --rebase origin dev;"
+    - ssh root@webx-dev.ill.fr "cd /data/apps/webx-deploy; ./deploy-deb.sh"
