@@ -1,0 +1,21 @@
+#!/bin/sh
+
+set -e
+
+if [ "$1" = "configure" ]; then
+    if ! getent group webx >/dev/null; then
+        addgroup --system --quiet webx
+    fi
+
+    if ! getent passwd webx >/dev/null; then
+        adduser --system --quiet --ingroup webx --no-create-home --home /nonexistent webx
+    fi
+
+    mkdir -p /var/log/webx
+    chown webx:webx /var/log/webx
+
+    echo "Starting webx-router"
+    systemctl enable webx-router
+fi
+
+#DEBHELPER#
