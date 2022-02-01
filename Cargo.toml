@@ -30,11 +30,10 @@ extended-description = ""
 depends = "$auto"
 section = "net"
 priority = "optional"
-maintainer-scripts = "debian-scripts"
+maintainer-scripts = "./debian-scripts"
+systemd-units = {}
 conf-files = ["/etc/webx/webx-router-config.yml"]
 assets = [
     ["target/release/webx-router", "usr/bin/", "755"],
     ["config.yml", "/etc/webx/webx-router-config.yml", "644"]
 ]
-# This section needs to be here even if it's empty, for the systemd integration to work.
-[package.metadata.deb.systemd-units]
