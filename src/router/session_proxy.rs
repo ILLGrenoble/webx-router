@@ -132,11 +132,11 @@ impl SessionProxy {
 
         } else if message_parts[0] == "create" {
             match self.decode_create_command(&message_parts) {
-                Ok((username, password, width, height)) => {
+                Ok((username, password, width, height, keyboard)) => {
                     info!("Got session create command for user \"{}\"", username);
 
                     // Request session from WebX Session Manager
-                    let message = self.get_or_create_session(settings, &username, &password, width, height);
+                    let message = self.get_or_create_session(settings, &username, &password, width, height, &keyboard);
 
                     // Send message response
                     if let Err(error) = secure_rep_socket.send(message.as_str(), 0) {
@@ -146,6 +146,12 @@ impl SessionProxy {
                 },
                 Err(error) => {
                     error!("Failed to decode create command: {}", error);
+                    
+                    // Send error response
+                    if let Err(error) = secure_rep_socket.send(format!("1,{}", error).as_str(), 0) {
+                        error!("Failed to send session creation error response: {}", error);
+                    }
+                    send_empty = false;
                 }
             }
 
@@ -162,8 +168,8 @@ impl SessionProxy {
         }
     }
 
-    fn get_or_create_session(&mut self, settings: &Settings, username: &str, password: &str, width: u32, height: u32) -> String {
-        match self.service.get_or_create_session(settings, username, password, width, height, &self.context) {
+    fn get_or_create_session(&mut self, settings: &Settings, username: &str, password: &str, width: u32, height: u32, keyboard: &str) -> String {
+        match self.service.get_or_create_session(settings, username, password, width, height, keyboard, &self.context) {
             Ok(session) => format!("0,{}", session.id()),
             Err(error) => {
                 error!("Failed to create session for user {}: {}", username, error);
@@ -182,8 +188,8 @@ impl SessionProxy {
         }
     }
 
-    fn decode_create_command(&self, message_parts: &Vec<&str>) -> Result<(String, String, u32, u32)> {
-        if message_parts.len() == 5 {
+    fn decode_create_command(&self, message_parts: &Vec<&str>) -> Result<(String, String, u32, u32, String)> {
+        if message_parts.len() == 6 {
             let username_base64 = message_parts[1];
             let password_base64 = message_parts[2];
             let username = self.decode_base64(username_base64)?;
@@ -191,11 +197,12 @@ impl SessionProxy {
 
             let width = message_parts[3].to_string().parse::<u32>()?;
             let height = message_parts[4].to_string().parse::<u32>()?;
+            let keyboard = message_parts[5].to_string();
 
-            Ok((username, password, width, height))
+            Ok((username, password, width, height, keyboard))
 
         } else {
-            Err(RouterError::SessionError(format!("Incorrect number of parameters. Got {}, expected 3", message_parts.len())))
+            Err(RouterError::SessionError(format!("Incorrect number of parameters. Got {}, expected 6", message_parts.len())))
         }
     }
 

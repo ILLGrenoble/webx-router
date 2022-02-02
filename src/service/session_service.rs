@@ -22,7 +22,7 @@ impl SessionService {
         self.session_container.stop_sessions();
     }
 
-    pub fn get_or_create_session(&mut self, settings: &Settings, username: &str, password: &str, width: u32, height: u32, context: &zmq::Context) -> Result<&Session> {
+    pub fn get_or_create_session(&mut self, settings: &Settings, username: &str, password: &str, width: u32, height: u32, keyboard: &str, context: &zmq::Context) -> Result<&Session> {
         // See if we are using the session manager
         let x11_session;
         if settings.sesman.enabled {
@@ -40,7 +40,7 @@ impl SessionService {
             self.session_container.remove_previous_session_for_user(username);
 
             // Create new session for the user
-            self.create_session(x11_session, settings, context)?;
+            self.create_session(x11_session, settings, keyboard, context)?;
         } 
 
         // Return the session
@@ -66,11 +66,11 @@ impl SessionService {
         Ok(())
     }
 
-    fn create_session(&mut self, x11_session: X11Session, settings: &Settings, context: &zmq::Context)  -> Result<()> {
+    fn create_session(&mut self, x11_session: X11Session, settings: &Settings, keyboard: &str, context: &zmq::Context)  -> Result<()> {
         debug!("Creating session for user \"{}\" on display {}", &x11_session.username(), &x11_session.display_id());
 
         // Spawn a new WebX Engine
-        let engine = self.spawn_engine(&x11_session, settings)?;
+        let engine = self.spawn_engine(&x11_session, settings, keyboard)?;
 
         let mut session = Session::new(x11_session, engine);
 
@@ -103,7 +103,7 @@ impl SessionService {
         sesman_connector.get_authenticated_x11_session(username, password, width, height, &settings.transport.ipc.sesman_connector)
     }
 
-    fn spawn_engine(&self, x11_session: &X11Session, settings: &Settings) -> Result<Engine> {
+    fn spawn_engine(&self, x11_session: &X11Session, settings: &Settings, keyboard: &str) -> Result<Engine> {
         let engine_path = &settings.engine.path;
         let engine_logdir = &settings.engine.logdir;
         let message_proxy_path = &settings.transport.ipc.message_proxy;
@@ -128,6 +128,8 @@ impl SessionService {
 
         let mut command = Command::new(engine_path);
         command
+            .arg("-k")
+            .arg(keyboard)
             .stdout(file_out)
             .env("DISPLAY", x11_session.display_id())
             .env("WEBX_ENGINE_LOG", "debug")
@@ -144,6 +146,8 @@ impl SessionService {
         } else {
             debug!("Launching WebX Engine \"{}\" on display {}", engine_path, x11_session.display_id());
         }
+
+        debug!("Spawning command: {}", format!("{:?}", command).replace("\"", ""));
 
         match command.spawn() {
             Err(error) => Err(RouterError::SessionError(format!("Failed to spawn WebX Engine: {}", error))),
