@@ -18,4 +18,4 @@ sesman:
   fallback_display_id: ":0"
 engine:
   path: /usr/bin/webx-engine
-  logdir: /var/log/webx
+  logdir: /var/log/webx/engine
