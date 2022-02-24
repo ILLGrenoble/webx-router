@@ -76,7 +76,7 @@ impl SessionService {
         if settings.sesman.auto_logout_s > 0 {
             let inactive_sessions = self.session_container.get_inactive_session_ids(settings.sesman.auto_logout_s);
             for session in inactive_sessions.iter() {
-                info!("Removing Session with id {} for user {}", &session.0, &session.1);
+                info!("Removing inactive session with id {} for user {}", &session.0, &session.1);
     
                 // Remove session
                 self.session_container.remove_session_with_id(&session.0);
