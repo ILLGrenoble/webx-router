@@ -26,7 +26,7 @@ impl SessionProxy {
 
         let secure_rep_socket = self.create_secure_rep_socket(transport.ports.session, &transport.encryption.private)?;
 
-        let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC])?;
+        let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC, INPROC_SESSION_TOPIC])?;
 
         let mut items = [
             event_bus_sub_socket.as_poll_item(zmq::POLLIN),
@@ -36,7 +36,7 @@ impl SessionProxy {
         self.is_running = true;
         while self.is_running {
             // Poll both sockets
-            if zmq::poll(&mut items, -1).is_ok() {
+            if zmq::poll(&mut items, 5000).is_ok() {
                 // Check for event bus messages
                 if items[0].is_readable() {
                     self.read_event_bus(&event_bus_sub_socket);
@@ -46,6 +46,9 @@ impl SessionProxy {
                 if items[1].is_readable() && self.is_running {
                     self.handle_secure_request(&secure_rep_socket, settings);
                 }
+
+                // Cleanup inactive sessions
+                self.service.cleanup_inactive_sessions(settings, &self.context);
             }
         }
 
@@ -88,6 +91,12 @@ impl SessionProxy {
 
                 // Close all sessions gracefully
                 self.service.stop_sessions();
+
+            } else if event.starts_with(INPROC_SESSION_TOPIC) {
+                let message_text = msg.as_str().unwrap();
+                let message_parts = message_text.split(':').collect::<Vec<&str>>();
+                let session_id = message_parts[1];
+                self.service.update_session_activity(session_id);
 
             } else {
                 warn!("Got unknown event bus command: {}", event);

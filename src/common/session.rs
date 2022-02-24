@@ -1,12 +1,13 @@
 use std::fs;
 
-use crate::common::{Engine, X11Session};
+use crate::common::{Engine, X11Session, System};
 
 use signal_child::Signalable;
 
 pub struct Session {
     x11_session: X11Session,
     engine: Engine,
+    last_activity: u64,
 }
 
 impl Session {
@@ -15,7 +16,19 @@ impl Session {
         Self {
             x11_session,
             engine,
+            last_activity: System::current_time_s()
         }
+    }
+
+    pub fn is_active(&self, session_inactivity_s: u64) -> bool {
+        let current_time = System::current_time_s();
+        current_time - self.last_activity <= session_inactivity_s
+    }
+
+    pub fn update_activity(&mut self) {
+        let current_time = System::current_time_s();
+        trace!("Updating activity of session {} to {}", self.id(), current_time);
+        self.last_activity = current_time;
     }
 
     pub fn id(&self) -> &str {

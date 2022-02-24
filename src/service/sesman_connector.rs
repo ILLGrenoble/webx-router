@@ -12,7 +12,7 @@ enum SessionManagerRequest {
     Who,
 
     #[serde(rename = "logout")]
-    Logout { id: u32 },
+    Logout { id: String },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -57,34 +57,44 @@ impl SesmanConnector {
     pub fn get_authenticated_x11_session(&self, username: &str, password: &str, width: u32, height: u32, ipc_path: &str) -> Result<X11Session> {
         let socket = self.create_req_socket(ipc_path)?;
 
-        let response = self.handle_sesman_request(username, password, width, height, &socket);
+        let response = self.handle_sesman_login_request(username, password, width, height, &socket);
 
         self.disconnect_req_socket(&socket, ipc_path);
 
         response
     }
 
-    fn handle_sesman_request(&self, username: &str, password: &str, width: u32, height: u32, socket: &zmq::Socket) -> Result<X11Session> {
+    pub fn logout(&self, session_id: &str, ipc_path: &str) -> Result<()> {
+        let socket = self.create_req_socket(ipc_path)?;
+
+        let response = self.handle_sesman_logout_request(session_id, &socket);
+
+        self.disconnect_req_socket(&socket, ipc_path);
+
+        response
+    }
+
+    fn handle_sesman_login_request(&self, username: &str, password: &str, width: u32, height: u32, socket: &zmq::Socket) -> Result<X11Session> {
         // Create the request
         let request = SessionManagerRequest::Login{username: username.to_string(), password: password.to_string(), width, height};
         let request_message = serde_json::to_string(&request)?;
 
         // Send x11 session request
-        debug!("Sending X11 session request");
+        debug!("Sending X11 session login request");
         if let Err(error) = socket.send(&request_message, 0) {
-            error!("Failed to send X11 session request: {}", error);
-            return Err(RouterError::TransportError("Failed to send X11 session request".to_string()));
+            error!("Failed to send X11 session login request: {}", error);
+            return Err(RouterError::TransportError("Failed to send X11 session login request".to_string()));
         }
 
-        debug!("Waiting for X11 session response");
+        debug!("Waiting for X11 session login response");
         let mut response = zmq::Message::new();
         if let Err(error) = socket.recv(&mut response, 0) {
-            error!("Failed to receive response to X11 session request: {}", error);
-            return Err(RouterError::TransportError("Failed to receive X11 session request response".to_string()));
+            error!("Failed to receive response to X11 session login request: {}", error);
+            return Err(RouterError::TransportError("Failed to receive X11 session login request response".to_string()));
         }
 
         let response_message = response.as_str().unwrap();
-        debug!("Received X11 session request response: {}", &response_message);
+        debug!("Received X11 session login request response: {}", &response_message);
 
 
         match serde_json::from_str::<SessionManagerResponse>(&response_message) {
@@ -94,17 +104,61 @@ impl SesmanConnector {
                     Ok(X11Session::new(session.id, session.username, session.display_id, session.xauthority_file_path))
                 },
                 SessionManagerResponse::Error { message } => {
-                    debug!("X11 session request failed, got error: {}", &message);
+                    debug!("X11 session login request failed, got error: {}", &message);
                     Err(RouterError::SessionError(format!("Failed to login to WebX Session Manager: {}", message)))
                 },
                 _ => {
-                    debug!("X11 session request return unknown response");
+                    debug!("X11 session login request return unknown response");
                     Err(RouterError::SessionError("Unkown response returned by WebX Session Manager".to_string()))
                 }
             },
             Err(error) => {
-                error!("Failed to unserialise WebX Session Manager response: {}", error);
-                Err(RouterError::SessionError("Failed to unserialise WebX Session Manager response".to_string()))
+                error!("Failed to unserialise WebX Session Manager login response: {}", error);
+                Err(RouterError::SessionError("Failed to unserialise WebX Session Manager login response".to_string()))
+            },
+        }
+    }
+
+    fn handle_sesman_logout_request(&self, session_id: &str, socket: &zmq::Socket) -> Result<()> {
+        // Create the request
+        let request = SessionManagerRequest::Logout{id: session_id.to_string()};
+        let request_message = serde_json::to_string(&request)?;
+
+        // Send x11 session request
+        debug!("Sending X11 session logout request");
+        if let Err(error) = socket.send(&request_message, 0) {
+            error!("Failed to send X11 session logout request: {}", error);
+            return Err(RouterError::TransportError("Failed to send X11 session logout request".to_string()));
+        }
+
+        debug!("Waiting for X11 session logout response");
+        let mut response = zmq::Message::new();
+        if let Err(error) = socket.recv(&mut response, 0) {
+            error!("Failed to receive response to X11 session lgout request: {}", error);
+            return Err(RouterError::TransportError("Failed to receive X11 session logout request response".to_string()));
+        }
+
+        let response_message = response.as_str().unwrap();
+        debug!("Received X11 session logout request response: {}", &response_message);
+
+        match serde_json::from_str::<SessionManagerResponse>(&response_message) {
+            Ok(response) => match response {
+                SessionManagerResponse::Logout => {
+                    debug!("X11 session logout request successful for session {}", session_id);
+                    Ok(())
+                },
+                SessionManagerResponse::Error { message } => {
+                    debug!("X11 session logout request failed for session {}, got error: {}", session_id, &message);
+                    Err(RouterError::SessionError(format!("Failed to logout of WebX Session Manager: {}", message)))
+                },
+                _ => {
+                    debug!("X11 session logout request return unknown response");
+                    Err(RouterError::SessionError("Unkown response returned by WebX Session Manager".to_string()))
+                }
+            },
+            Err(error) => {
+                error!("Failed to unserialise WebX Session Manager logout response: {}", error);
+                Err(RouterError::SessionError("Failed to unserialise WebX Session Manager login response".to_string()))
             },
         }
     }

@@ -35,9 +35,9 @@ impl SessionService {
         }
 
         // See if session already exists matching x11_session attributes
-        if self.session_container.get_existing_session(&x11_session).is_none() {
+        if self.session_container.get_session_by_x11session(&x11_session).is_none() {
             // cleanup any other sessions for the user
-            self.session_container.remove_previous_session_for_user(username);
+            self.session_container.remove_session_for_user(username);
 
             // Create new session for the user
             self.create_session(x11_session, settings, keyboard, context)?;
@@ -54,7 +54,7 @@ impl SessionService {
         if let Some(session) = self.session_container.get_session_by_session_id(session_id) {
             if let Err(error) =  self.validate_engine(session.engine(), context, 1) {
                 // Delete session
-                self.session_container.remove_previous_session_with_id(session_id);
+                self.session_container.remove_session_with_id(session_id);
                 return Err(error);
             }
 
@@ -64,6 +64,29 @@ impl SessionService {
 
         // All good
         Ok(())
+    }
+
+    pub fn update_session_activity(&mut self, session_id: &str) {
+        if let Some(session) = self.session_container.get_mut_session_by_session_id(session_id) {
+            session.update_activity();
+        }
+    }
+
+    pub fn cleanup_inactive_sessions(&mut self, settings: &Settings, context: &zmq::Context) {
+        if settings.sesman.auto_logout_s > 0 {
+            let inactive_sessions = self.session_container.get_inactive_session_ids(settings.sesman.auto_logout_s);
+            for session in inactive_sessions.iter() {
+                info!("Removing Session with id {} for user {}", &session.0, &session.1);
+    
+                // Remove session
+                self.session_container.remove_session_with_id(&session.0);
+    
+                // Close X11 session
+                if settings.sesman.enabled {
+                    self.request_session_logout(&session.0, context, settings);
+                }
+            }
+        }
     }
 
     fn create_session(&mut self, x11_session: X11Session, settings: &Settings, keyboard: &str, context: &zmq::Context)  -> Result<()> {
@@ -101,6 +124,15 @@ impl SessionService {
         let sesman_connector = SesmanConnector::new(context.clone());
 
         sesman_connector.get_authenticated_x11_session(username, password, width, height, &settings.transport.ipc.sesman_connector)
+    }
+
+    fn request_session_logout(&self, session_id: &str, context: &zmq::Context, settings: &Settings) {
+        // Call to WebX Session Manager
+        let sesman_connector = SesmanConnector::new(context.clone());
+
+        if let Err(error) = sesman_connector.logout(session_id, &settings.transport.ipc.sesman_connector) {
+            warn!("Got error logging out X11 session: {}", error);
+        }
     }
 
     fn spawn_engine(&self, x11_session: &X11Session, settings: &Settings, keyboard: &str) -> Result<Engine> {

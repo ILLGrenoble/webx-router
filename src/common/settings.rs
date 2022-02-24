@@ -42,6 +42,7 @@ pub struct SesManSettings {
     pub enabled: bool,
     // pub url: String,
     pub fallback_display_id: String,
+    pub auto_logout_s: u64,
 }
 
 #[derive(Debug, Deserialize, Clone)]

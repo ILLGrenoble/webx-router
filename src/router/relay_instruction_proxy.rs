@@ -1,5 +1,7 @@
 use crate::common::*;
 use std::process;
+use std::ops::Deref;
+use hex;
 
 pub struct RelayInstructionProxy {
     context: zmq::Context,
@@ -24,6 +26,8 @@ impl RelayInstructionProxy {
 
         let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC])?;
 
+        let event_bus_pub_socket = EventBus::create_event_publisher(&self.context)?;
+
         let mut items = [
             event_bus_sub_socket.as_poll_item(zmq::POLLIN),
             relay_sub_socket.as_poll_item(zmq::POLLIN),
@@ -40,7 +44,14 @@ impl RelayInstructionProxy {
 
                 // Check for relay PUB messages (if running)
                 if items[1].is_readable() && self.is_running {
-                    self.forward_relay_instruction(&relay_sub_socket, &engine_pub_socket);
+                    match self.forward_relay_instruction(&relay_sub_socket, &engine_pub_socket) {
+                        // Send session id on inproc message queue, to be used by session_proxy
+                        Some(session_id) => {
+                            let session_message = format!("{}:{}", INPROC_SESSION_TOPIC, session_id);
+                            event_bus_pub_socket.send(&session_message, 0).unwrap();
+                        },
+                        None => {}
+                    }
                 }
             }
         }
@@ -100,8 +111,9 @@ impl RelayInstructionProxy {
         }
     }
 
-    fn forward_relay_instruction(&self, relay_sub_socket: &zmq::Socket, engine_pub_socket: &zmq::Socket) {
+    fn forward_relay_instruction(&self, relay_sub_socket: &zmq::Socket, engine_pub_socket: &zmq::Socket) -> Option<String> {
         let mut msg = zmq::Message::new();
+        let mut session_id_option = None;
 
         // Get message from relay publisher
         if let Err(error) = relay_sub_socket.recv(&mut msg, 0) {
@@ -109,10 +121,18 @@ impl RelayInstructionProxy {
 
         } else {
             trace!("Got instruction from relay of length {}", msg.len());
+
+            // Get session_id from the msg
+            let raw_session_id = msg.deref();
+            let session_id = hex::encode(&raw_session_id[0 .. 16]);
+            session_id_option = Some(session_id);
+
             // Resend message on engine pub socket
             if let Err(error) = engine_pub_socket.send(msg, 0) {
                 error!("Failed to send instruction to engine subscribers: {}", error);
             }   
         }
+
+        session_id_option
     }
 }

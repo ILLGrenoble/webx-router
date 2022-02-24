@@ -3,6 +3,7 @@ use std::process::{Command};
 use std::fs;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct System {
 }
@@ -33,5 +34,14 @@ impl System {
 
         debug!("Changed permission of {}", path);
         Ok(())
+    }
+
+    pub fn current_time_s() -> u64 {
+        if let Ok(current_time) = SystemTime::now().duration_since(UNIX_EPOCH) {
+            current_time.as_secs()
+     
+        } else {
+            0
+        }
     }
 }
