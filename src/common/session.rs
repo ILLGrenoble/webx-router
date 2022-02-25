@@ -61,7 +61,7 @@ impl Session {
                     debug!("Shutdown WebX Engine for {} on display {}", self.username(), self.display_id());
 
                     // Delete the IPC socket file
-                    fs::remove_file(ipc_path).unwrap();
+                    let _ = fs::remove_file(ipc_path);
                 }
             },
             Err(error) => error!("Failed to interrupt WebX Engine for {} running on PID {}: {}", self.username(), process_id, error),
