@@ -1,11 +1,11 @@
 stages:
-  - build-dev
-  - deploy-dev
+  - build-alpha
+  - deploy-alpha
 
-build-dev:
-  stage: build-dev
-  # only:
-  #   - dev
+build-alpha:
+  stage: build-alpha
+  only:
+    - alpha
   tags:
     - debian
     - dss
@@ -21,10 +21,10 @@ build-dev:
       - webx-router_dev_amd64.deb
     expire_in: 1 week
 
-deploy-dev:
-  stage: deploy-dev
-  # only:
-  #   - dev
+deploy-alpha:
+  stage: deploy-alpha
+  only:
+    - alpha
   tags:
     - debian
     - dss
