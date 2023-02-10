@@ -39,8 +39,8 @@ WORKDIR /app
 # Copy package to standard directory
 RUN mkdir -p target/debian
 RUN mkdir -p target/ubuntu
-COPY --from=debian /app/target/debian/* target/debian
-COPY --from=ubuntu /app/target/debian/* target/ubuntu
+COPY --from=debian /app/target/debian/* target/debian/
+COPY --from=ubuntu /app/target/debian/* target/ubuntu/
 COPY --from=debian /app/VERSION .
 
 # to obtain built deb package:
