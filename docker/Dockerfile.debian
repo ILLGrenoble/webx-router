@@ -1,4 +1,4 @@
-FROM rust:1.58-slim AS debian
+FROM rust:1-slim AS debian
 
 WORKDIR /app
 
