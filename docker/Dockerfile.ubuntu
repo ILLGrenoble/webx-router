@@ -24,7 +24,6 @@ WORKDIR /app
 # Copy package to standard directory
 RUN mkdir -p target/ubuntu
 COPY --from=ubuntu /app/target/debian/* target/ubuntu/
-COPY --from=ubuntu /app/VERSION .
 
 # to obtain built deb package:
 # docker build -t webx-router-builder .
