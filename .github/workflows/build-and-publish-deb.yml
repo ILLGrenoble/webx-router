@@ -1,0 +1,46 @@
+name: Build and Publish Debian Package
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  build-debian-package:
+    runs-on: ubuntu-latest
+    permissions: write-all
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image
+        run: |
+          docker build -t webx-router-builder -f docker/Dockerfile .
+
+      - name: Extract Debian package
+        run: |
+          CONTAINER_ID=$(docker create webx-router-builder)
+          docker cp $CONTAINER_ID:/app/target/debian/. ./debian-package
+          docker cp $CONTAINER_ID:/app/target/ubuntu/. ./ubuntu-package
+          docker rm -f $CONTAINER_ID
+          mv ./debian-package/webx-router_0.0.0-1_amd64.deb ./debian-package/webx-router_${{ github.ref_name }}_debian_11_amd64.deb
+          mv ./ubuntu-package/webx-router_0.0.0-1_amd64.deb ./debian-package/webx-router_${{ github.ref_name }}_ubuntu_22.04_amd64.deb
+
+      - name: Upload Debian artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: debian-package
+          path: ./debian-package/
+
+      - name: Upload Debian package as Release asset
+        uses: softprops/action-gh-release@v1
+        with:
+          files: debian-package/*.deb

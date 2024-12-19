@@ -10,9 +10,6 @@ COPY . .
 RUN cargo install cargo-deb
 RUN cargo deb
 
-# Save the version to a file
-RUN awk -F ' = ' '$1 ~ /version/ { gsub(/[\"]/, "", $2); printf("%s",$2) }' Cargo.toml > VERSION
-
 FROM ubuntu:22.04 AS ubuntu
 
 WORKDIR /app
@@ -41,7 +38,6 @@ RUN mkdir -p target/debian
 RUN mkdir -p target/ubuntu
 COPY --from=debian /app/target/debian/* target/debian/
 COPY --from=ubuntu /app/target/debian/* target/ubuntu/
-COPY --from=debian /app/VERSION .
 
 # to obtain built deb package:
 # docker build -t webx-router-builder .
