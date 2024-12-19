@@ -35,7 +35,7 @@ jobs:
           mv ./ubuntu-package/webx-router_0.0.0-1_amd64.deb ./debian-package/webx-router_${{ github.ref_name }}_ubuntu_22.04_amd64.deb
 
       - name: Upload Debian artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: debian-package
           path: ./debian-package/
