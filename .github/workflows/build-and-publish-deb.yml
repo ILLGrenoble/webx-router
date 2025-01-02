@@ -23,6 +23,8 @@ jobs:
 
       - name: Build Docker image
         run: |
+          sed -i "s/0\.0\.0-dev/${{ github.ref_name }}/g" Cargo.toml 
+          sed -i "s/0\.0\.0-dev/${{ github.ref_name }}/g" Cargo.lock 
           docker build -t webx-router-builder -f docker/Dockerfile .
 
       - name: Extract Debian package
@@ -31,8 +33,8 @@ jobs:
           docker cp $CONTAINER_ID:/app/target/debian/. ./debian-package
           docker cp $CONTAINER_ID:/app/target/ubuntu/. ./ubuntu-package
           docker rm -f $CONTAINER_ID
-          mv ./debian-package/webx-router_0.0.0-1_amd64.deb ./debian-package/webx-router_${{ github.ref_name }}_debian_11_amd64.deb
-          mv ./ubuntu-package/webx-router_0.0.0-1_amd64.deb ./debian-package/webx-router_${{ github.ref_name }}_ubuntu_22.04_amd64.deb
+          mv ./debian-package/webx-router_${{ github.ref_name }}-1_amd64.deb ./debian-package/webx-router_${{ github.ref_name }}_debian_11_amd64.deb
+          mv ./ubuntu-package/webx-router_${{ github.ref_name }}-1_amd64.deb ./debian-package/webx-router_${{ github.ref_name }}_ubuntu_22.04_amd64.deb
 
       - name: Upload Debian artifacts
         uses: actions/upload-artifact@v4

@@ -548,7 +548,7 @@ checksum = "46a2e384a3f170b0c7543787a91411175b71afd56ba4d3a0ae5678d4e2243c0e"
 
 [[package]]
 name = "webx-router"
-version = "0.0.0"
+version = "0.0.0-dev"
 dependencies = [
  "base64",
  "config",
