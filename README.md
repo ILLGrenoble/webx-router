@@ -79,13 +79,13 @@ The WebX Router can either be launched by using the VSCode Launch Command <em>De
 
 #### WebX Router configuration
 
-The configuration file `config.yml` is used to define the logging leve, TCP ports, IPC paths, WebX Engine path. This file can be located in the working directory or `/etc/webx/webx-router-config.yml`. Alternatively each configuration value can be overridden by an environment variable, prefixed by WEBX_ROUTER. For example, the `engine: path:` configuration value can be overridden by the environment variable `WEBX_ROUTER_ENGINE_PATH`.
+The configuration file `config.yml` is used to define the logging level, TCP ports, IPC paths, WebX Engine path. This file can be located in the working directory or `/etc/webx/webx-router-config.yml`. Alternatively each configuration value can be overridden by an environment variable, prefixed by WEBX_ROUTER. For example, the `engine: path:` configuration value can be overridden by the environment variable `WEBX_ROUTER_ENGINE_PATH`.
 
 ### Building, running and debugging using the WebX Dev Workspace
 
 The [WebX Dev Workspace](https://github.com/ILLGrenoble/webx-dev-env) combines the development of The WebX Engine, WebX Router and WebX Session Manager in a single workspace and the development and testing of all of these can be combined in a single devcontainer environment.
 
-This is the recommended way of building, running and debuggine the WebX stack as it provides the most flexible approach to development without installing any dependencies. The environment is configured to easily run the three projects together and container VSCode Launch Commands to debug the application.
+This is the recommended way of building, running and debuggine the WebX stack as it provides the most flexible approach to development without installing any dependencies. The environment is configured to easily run the three projects together and contains VSCode Launch Commands to debug the application.
 
 In the devcontainer you should start by building the WebX Engine then launch the WebX Router and WebX Session Manager using the VSCode Launch Commands. The WebX Router can be debugged using the standard VSCode debugger.
 
