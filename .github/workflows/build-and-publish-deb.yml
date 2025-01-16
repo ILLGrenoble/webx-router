@@ -7,7 +7,10 @@ on:
 
 jobs:
   build-debian-package:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, ubuntu-22.04-arm64 ]
+    runs-on: ${{ matrix.os }}
     permissions: write-all
 
     steps:
@@ -29,18 +32,20 @@ jobs:
 
       - name: Extract Debian package
         run: |
+          ARCH=$(dpkg --print-architecture)
+
           CONTAINER_ID=$(docker create webx-router-builder)
           docker cp $CONTAINER_ID:/app/target/debian/. ./debian-package
           docker cp $CONTAINER_ID:/app/target/ubuntu/. ./ubuntu-package
           docker rm -f $CONTAINER_ID
     
           # Find the actual Debian package filename in the `./debian-package` directory
-          DEB_FILE=$(find ./debian-package -name "webx-router_*_amd64.deb")
-          UBUNTU_FILE=$(find ./ubuntu-package -name "webx-router_*_amd64.deb")
+          DEB_FILE=$(find ./debian-package -name "webx-router_*_${ARCH}.deb")
+          UBUNTU_FILE=$(find ./ubuntu-package -name "webx-router_*_${ARCH}.deb")
     
           # Move and rename the files
-          mv "$DEB_FILE" "./debian-package/webx-router_${{ github.ref_name }}_debian_11_amd64.deb"
-          mv "$UBUNTU_FILE" "./debian-package/webx-router_${{ github.ref_name }}_ubuntu_22.04_amd64.deb"
+          mv "$DEB_FILE" "./debian-package/webx-router_${{ github.ref_name }}_debian_11_${ARCH}.deb"
+          mv "$UBUNTU_FILE" "./debian-package/webx-router_${{ github.ref_name }}_ubuntu_22.04_${ARCH}.deb"
 
       - name: Upload Debian artifacts
         uses: actions/upload-artifact@v4
