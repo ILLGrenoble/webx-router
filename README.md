@@ -142,7 +142,9 @@ Two TCP sockets are used to manage instructions from the WebX Relay to WebX Engi
 
 The Relay Instruction Proxy runs with the subscriber pattern (`ZMQ_SUB`) on a TCP socket where it receives instructions from a relay and publishes it on an IPC socket (`ZMQ_PUB`). All WebX Engines on the host subscribe to this WebX Router publisher, filtering instructions by their sessionId: unfiltered instructions are handled by the engine.  
 
-The Engine Message Proxy runs with the publisher pattern (`ZMQ_PUB`) on a TCP socket where it publishes messages (from WebX Engines) to multiple connections from the WebX Relay. Messages from the engines are received on an IPC subscriber socket (`ZMQ_SUB`) on the same host. The WebX Relay has a connection for each session running on the host, filtering messages by the sessionId and forwarding them to the correct clients. 
+The Engine Message Proxy runs with the publisher pattern (`ZMQ_PUB`) on a TCP socket where it publishes messages (from WebX Engines) to the WebX Relay. Messages from the engines are received on an IPC subscriber socket (`ZMQ_SUB`) on the same host. 
+
+The WebX Relay has filters messages by the sessionId and forwards them to the correct clients. 
 
 #### Session Creation requests
 
@@ -202,7 +204,7 @@ The WebX Engine is started with the keyboard layout chosen by the client.
 
 > Note this section will change in the future
 
-Currently a single WebX Engine is associated to an X11 Session. Multiple login actions from a WebX Relay will produce multiple socket connections to the WebX Router, all connected to the same WebX Engine. 
+Currently a single WebX Engine is associated to an X11 Session. Multiple login actions from a WebX Relay will result in just a single connection to the WebX Router for a given host and only a single WebX Engine being spawned. 
 
 While valid in terms of protocol this can produce network problems if the end clients have widely different bandwidths and large amounts of image data are produced by the WebX Engine: what is perfectly fine for a large bandwidth client may easily saturate a low bandwidth one.
 
