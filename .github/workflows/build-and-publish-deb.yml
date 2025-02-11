@@ -51,18 +51,18 @@ jobs:
           mkdir debian-packages
 
           # Move and rename the files
-          mv "$DEB11_FILE" "./debian-package/webx-router_${{ github.ref_name }}_debian_11_${ARCH}.deb"
-          mv "$DEB12_FILE" "./debian-package/webx-router_${{ github.ref_name }}_debian_12_${ARCH}.deb"
-          mv "$UBUNTU22_FILE" "./debian-package/webx-router_${{ github.ref_name }}_ubuntu_22.04_${ARCH}.deb"
-          mv "$UBUNTU24_FILE" "./debian-package/webx-router_${{ github.ref_name }}_ubuntu_24.04_${ARCH}.deb"
+          mv "$DEB11_FILE" "./debian-packages/webx-router_${{ github.ref_name }}_debian_11_${ARCH}.deb"
+          mv "$DEB12_FILE" "./debian-packages/webx-router_${{ github.ref_name }}_debian_12_${ARCH}.deb"
+          mv "$UBUNTU22_FILE" "./debian-packages/webx-router_${{ github.ref_name }}_ubuntu_22.04_${ARCH}.deb"
+          mv "$UBUNTU24_FILE" "./debian-packages/webx-router_${{ github.ref_name }}_ubuntu_24.04_${ARCH}.deb"
 
       - name: Upload Debian artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: debian-package
-          path: ./debian-package/
+          name: debian-packages
+          path: ./debian-packages/
 
-      - name: Upload Debian package as Release asset
+      - name: Upload Debian packages as Release assets
         uses: softprops/action-gh-release@v1
         with:
           files: debian-package/*.deb
