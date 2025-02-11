@@ -1,3 +1,8 @@
+0.1.4 11/02/2025
+================
+ * Build releases versions also for Debian 12 and Ubuntu 24
+ * Update dependencies
+
 0.1.3 28/01/2025
 ================
  * Update README
