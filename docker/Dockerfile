@@ -75,10 +75,10 @@ RUN mkdir -p target/debian11
 RUN mkdir -p target/debian12
 RUN mkdir -p target/ubuntu22
 RUN mkdir -p target/ubuntu24
-COPY --from=debian11 /app/packages/* target/debian11
-COPY --from=debian12 /app/packages/* target/debian12
-COPY --from=ubuntu22 /app/packages/* target/ubuntu22
-COPY --from=ubuntu24 /app/packages/* target/ubuntu24
+COPY --from=debian11 /app/target/debian/* target/debian11
+COPY --from=debian12 /app/target/debian/* target/debian12
+COPY --from=ubuntu22 /app/target/debian/* target/ubuntu22
+COPY --from=ubuntu24 /app/target/debian/* target/ubuntu24
 
 # to obtain built deb package:
 # docker build -t webx-router-builder .
