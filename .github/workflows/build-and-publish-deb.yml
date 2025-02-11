@@ -65,4 +65,4 @@ jobs:
       - name: Upload Debian packages as Release assets
         uses: softprops/action-gh-release@v1
         with:
-          files: debian-package/*.deb
+          files: debian-packages/*.deb
