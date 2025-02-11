@@ -4,6 +4,7 @@ use crate::service::SessionService;
 use std::str;
 use std::process;
 use std::vec::Vec;
+use base64::engine::{general_purpose::STANDARD, Engine};
 
 pub struct SessionProxy {
     context: zmq::Context,
@@ -216,7 +217,7 @@ impl SessionProxy {
     }
 
     fn decode_base64(&self, input: &str) -> Result<String> {
-        let decoded_bytes = base64::decode(input)?;
+        let decoded_bytes = STANDARD.decode(input)?;
 
         let output = str::from_utf8(&decoded_bytes)?;
 

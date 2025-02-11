@@ -60,13 +60,13 @@ impl Settings {
 
         let config_path = Settings::get_config_path(config_path);
 
-        let mut settings_raw = config::Config::default();
-
-        settings_raw.merge(config::File::new(config_path, config::FileFormat::Yaml))?;
-        settings_raw.merge(config::Environment::with_prefix("WEBX_ROUTER").separator("_"))?;
-
-        settings_raw.try_into()
-    }
+        let settings_raw = config::Config::builder()
+            .add_source(config::File::new(config_path, config::FileFormat::Yaml))
+            .add_source(config::Environment::with_prefix("WEBX_ROUTER").separator("_"))
+            .build()?;        
+ 
+        settings_raw.try_deserialize()
+   }
 
     pub fn verify(&self) -> bool {
         // Check that settings are valid for running a router

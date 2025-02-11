@@ -1,6 +1,6 @@
 pub use event_bus::{EventBus, APPLICATION_SHUTDOWN_COMMAND, INPROC_APP_TOPIC, INPROC_SESSION_TOPIC};
 pub use error::{RouterError, Result};
-pub use settings::{Settings, TransportSettings, EncryptionSettings, PortSettings, IPCSettings};
+pub use settings::{Settings, TransportSettings};
 pub use system::System;
 pub use session::Session;
 pub use session_container::SessionContainer;

@@ -4,7 +4,7 @@ use crate::common::*;
 use std::thread;
 
 pub struct Transport {
-    context: zmq:: Context,
+    context: zmq::Context,
 }
 
 impl Transport {

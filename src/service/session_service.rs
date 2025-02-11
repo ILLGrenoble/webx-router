@@ -113,7 +113,7 @@ impl SessionService {
     }
 
     fn get_fallback_x11_display(&self, settings: &Settings) -> Result<X11Session> {
-        let session_id = Uuid::new_v4().to_simple().to_string();
+        let session_id = Uuid::new_v4().simple().to_string();
         let username = System::get_current_username()?;
         let display = &settings.sesman.fallback_display_id;
         Ok(X11Session::new(session_id, username, display.to_string(), "".to_string()))
