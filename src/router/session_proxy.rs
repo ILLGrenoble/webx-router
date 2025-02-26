@@ -165,8 +165,32 @@ impl SessionProxy {
                 }
             }
 
+        } else if message_parts[0] == "connect" {
+
+            // Verify that we have a sessionId
+            if message_parts.len() != 2 {
+                error!("Received invalid connect command");
+
+            } else {
+                let session_id = message_parts[1];
+                info!("Got connect for session {}", session_id);
+
+                // Forward the connection request
+                match self.service.send_session_request(&session_id, &self.context, &message_text) {
+                    Ok(response) => {
+                        if let Err(error) = secure_rep_socket.send(response.as_str(), 0) {
+                            error!("Failed to send client connection response: {}", error);
+                        }
+                        send_empty = false;
+                    }
+                    Err(error) => {
+                        error!("Failed to send client connection request: {}", error);
+                    }
+                }
+            }
+
         } else {
-            error!("Got unknown session command");
+            error!("Got unknown session command: {}", message_parts[0]);
         }
 
         // If send needed then send empty message

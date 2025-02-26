@@ -1,5 +1,5 @@
 use crate::common::*;
-use crate::service::{EngineValidator, SesmanConnector};
+use crate::service::{EngineConnector, SesmanConnector};
 
 use uuid::Uuid;
 use std::process::{Command, Stdio};
@@ -64,6 +64,16 @@ impl SessionService {
 
         // All good
         Ok(())
+    }
+
+    pub fn send_session_request(&mut self, session_id: &str, context: &zmq::Context, request: &str) -> Result<String> {
+        if let Some(session) = self.session_container.get_session_by_session_id(session_id) {
+
+            let engine_connector = EngineConnector::new(context.clone());
+            return engine_connector.send_request(&session.engine().ipc(), request);
+        }
+
+        Err(RouterError::SessionError(format!("Could not retrieve Session with ID \"{}\"", session_id)))
     }
 
     pub fn update_session_activity(&mut self, session_id: &str) {
@@ -189,11 +199,19 @@ impl SessionService {
 
     fn validate_engine(&self, engine: &Engine, context: &zmq::Context, mut tries: i32) -> Result<()> {
         // Verify session is running
-        let engine_validator = EngineValidator::new(context.clone());
+        let engine_connector = EngineConnector::new(context.clone());
         let mut connection_error = "".to_string();
         while tries > 0 {
-            match engine_validator.validate_connection(&engine.ipc()) {
-                Ok(_) => return Ok(()),
+            match engine_connector.send_request(&engine.ipc(), "ping") {
+                Ok(message) => {
+                    if message != "pong" {
+                        error!("Received non-pong response from WebX Engine on {}: {}", &engine.ipc(), message);
+                        return Err(RouterError::SessionError("Receivec non-pong message".to_string()));
+                    }
+            
+                    debug!("Received pong response from WebX Engine on {}", &engine.ipc());
+                    return Ok(());
+                },
                 Err(error) => {
                     connection_error = error.to_string();
                     tries -= 1;
