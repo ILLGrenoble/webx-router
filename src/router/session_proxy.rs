@@ -189,6 +189,31 @@ impl SessionProxy {
                 }
             }
 
+        } else if message_parts[0] == "disconnect" {
+
+            // Verify that we have a sessionId
+            if message_parts.len() != 3 {
+                error!("Received invalid disconnect command");
+
+            } else {
+                let session_id = message_parts[1];
+                let client_id = message_parts[2];
+                info!("Got disconnect from client {} for session {}", client_id, session_id);
+
+                // Forward the disconnection request
+                match self.service.send_session_request(&session_id, &self.context, &message_text) {
+                    Ok(response) => {
+                        if let Err(error) = secure_rep_socket.send(response.as_str(), 0) {
+                            error!("Failed to send client disconnection response: {}", error);
+                        }
+                        send_empty = false;
+                    }
+                    Err(error) => {
+                        error!("Failed to send client disconnection request: {}", error);
+                    }
+                }
+            }
+
         } else {
             error!("Got unknown session command: {}", message_parts[0]);
         }
