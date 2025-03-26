@@ -46,11 +46,25 @@ pub struct SesManSettings {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct FileLoggingSettings {
+    pub enabled: Option<bool>,
+    pub path: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct LoggingSettings {
+    pub level: String,
+    pub console: Option<bool>,
+    pub file: Option<FileLoggingSettings>,
+    pub format: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Settings {
-    pub logging: String,
+    pub logging: LoggingSettings,
     pub transport: TransportSettings,
     pub sesman: SesManSettings,
-    pub engine: EngineSettings
+    pub engine: EngineSettings,
 }
 
 static DEFAULT_CONFIG_PATHS: [&str; 2] = ["/etc/webx/webx-router-config.yml", "./config.yml"];

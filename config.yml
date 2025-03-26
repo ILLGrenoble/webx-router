@@ -1,4 +1,10 @@
-logging: info
+logging:
+  level: info
+  console: true
+  file:
+    enabled: true
+    path: /var/log/webx/webx-router.log
+  format: "[{timestamp}][{level}] {message}"
 transport:
   ports:
     connector: 5555
