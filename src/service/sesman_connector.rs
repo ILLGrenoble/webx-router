@@ -166,6 +166,7 @@ impl SesmanConnector {
     fn create_req_socket(&self, path: &str) -> Result<zmq::Socket> {
         let socket = self.context.socket(zmq::REQ)?;
         socket.set_linger(0)?;
+        socket.set_rcvtimeo(15000)?;
 
         let address = format!("ipc://{}", path);
         match socket.connect(address.as_str()) {
