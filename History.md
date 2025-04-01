@@ -1,3 +1,12 @@
+1.0.0 01/04/2025
+================
+ * Build releases for Ubuntu 20 and arm architecture
+ * Full code documentation
+ * Enable 15s timeout when requesting a session from the session manager.
+ * Add optional logging to file.
+ * Forward connect and disconnect commands to session proxy. 
+ * Add a connector class to send reqrep commands the engine.
+
 0.1.4 11/02/2025
 ================
  * Build releases versions also for Debian 12 and Ubuntu 24
