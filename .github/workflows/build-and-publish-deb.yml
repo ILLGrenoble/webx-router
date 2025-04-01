@@ -9,7 +9,7 @@ jobs:
   build-debian-package:
     strategy:
       matrix:
-        os: [ ubuntu-latest, ubuntu-22.04-arm64 ]
+        os: [ ubuntu-latest, ubuntu-22.04-arm ]
         # os: [ ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     permissions: write-all
