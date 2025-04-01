@@ -10,7 +10,6 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest, ubuntu-22.04-arm ]
-        # os: [ ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     permissions: write-all
 
@@ -59,13 +58,7 @@ jobs:
           mv "$UBUNTU22_FILE" "./debian-packages/webx-router_${{ github.ref_name }}_ubuntu_22.04_${ARCH}.deb"
           mv "$UBUNTU24_FILE" "./debian-packages/webx-router_${{ github.ref_name }}_ubuntu_24.04_${ARCH}.deb"
 
-      - name: Upload Debian artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: debian-packages-${{ github.run_id }}
-          path: ./debian-packages/
-
       - name: Upload Debian packages as Release assets
         uses: softprops/action-gh-release@v1
         with:
-          files: debian-packages-${{ github.run_id }}/*.deb
+          files: debian-packages/*.deb
