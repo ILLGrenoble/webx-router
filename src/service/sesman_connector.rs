@@ -42,18 +42,34 @@ enum SessionManagerResponse {
     Logout
 }
 
+/// The `SesmanConnector` facilitates communication with the WebX Session Manager.
+/// It handles session login, logout, and related requests.
 pub struct SesmanConnector {
     context: zmq::Context,
 }
 
 impl SesmanConnector {
-
+    /// Creates a new `SesmanConnector` instance.
+    ///
+    /// # Arguments
+    /// * `context` - The ZeroMQ context.
     pub fn new(context: zmq::Context) -> Self {
         Self {
             context,
         }
     }
 
+    /// Requests an authenticated X11 session from the WebX Session Manager.
+    ///
+    /// # Arguments
+    /// * `username` - The username of the user.
+    /// * `password` - The password of the user.
+    /// * `width` - The width of the session display.
+    /// * `height` - The height of the session display.
+    /// * `ipc_path` - The IPC path for the session manager.
+    ///
+    /// # Returns
+    /// The authenticated X11 session.
     pub fn get_authenticated_x11_session(&self, username: &str, password: &str, width: u32, height: u32, ipc_path: &str) -> Result<X11Session> {
         let socket = self.create_req_socket(ipc_path)?;
 
@@ -64,6 +80,14 @@ impl SesmanConnector {
         response
     }
 
+    /// Logs out a session from the WebX Session Manager.
+    ///
+    /// # Arguments
+    /// * `session_id` - The ID of the session to log out.
+    /// * `ipc_path` - The IPC path for the session manager.
+    ///
+    /// # Returns
+    /// A result indicating success or failure.
     pub fn logout(&self, session_id: &str, ipc_path: &str) -> Result<()> {
         let socket = self.create_req_socket(ipc_path)?;
 
@@ -74,6 +98,17 @@ impl SesmanConnector {
         response
     }
 
+    /// Handles the login request to the WebX Session Manager.
+    ///
+    /// # Arguments
+    /// * `username` - The username of the user.
+    /// * `password` - The password of the user.
+    /// * `width` - The width of the session display.
+    /// * `height` - The height of the session display.
+    /// * `socket` - The ZeroMQ socket.
+    ///
+    /// # Returns
+    /// The authenticated X11 session.
     fn handle_sesman_login_request(&self, username: &str, password: &str, width: u32, height: u32, socket: &zmq::Socket) -> Result<X11Session> {
         // Create the request
         let request = SessionManagerRequest::Login{username: username.to_string(), password: password.to_string(), width, height};
@@ -119,6 +154,14 @@ impl SesmanConnector {
         }
     }
 
+    /// Handles the logout request to the WebX Session Manager.
+    ///
+    /// # Arguments
+    /// * `session_id` - The ID of the session to log out.
+    /// * `socket` - The ZeroMQ socket.
+    ///
+    /// # Returns
+    /// A result indicating success or failure.
     fn handle_sesman_logout_request(&self, session_id: &str, socket: &zmq::Socket) -> Result<()> {
         // Create the request
         let request = SessionManagerRequest::Logout{id: session_id.to_string()};
@@ -163,6 +206,13 @@ impl SesmanConnector {
         }
     }
 
+    /// Creates a ZeroMQ REQ socket for communication with the session manager.
+    ///
+    /// # Arguments
+    /// * `path` - The IPC path for the session manager.
+    ///
+    /// # Returns
+    /// The created ZeroMQ socket.
     fn create_req_socket(&self, path: &str) -> Result<zmq::Socket> {
         let socket = self.context.socket(zmq::REQ)?;
         socket.set_linger(0)?;
@@ -177,6 +227,11 @@ impl SesmanConnector {
         Ok(socket)
     }
 
+    /// Disconnects a ZeroMQ REQ socket from the session manager.
+    ///
+    /// # Arguments
+    /// * `socket` - The ZeroMQ socket to disconnect.
+    /// * `path` - The IPC path for the session manager.
     fn disconnect_req_socket(&self, socket: &zmq::Socket, path: &str) {
         let address = format!("ipc://{}", path);
         match socket.disconnect(&address) {

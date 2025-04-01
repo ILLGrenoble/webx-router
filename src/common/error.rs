@@ -5,12 +5,18 @@ use std::fmt;
 
 pub type Result<T> = result::Result<T, RouterError>;
 
+/// The `RouterError` enum represents various error types that can occur in the application.
 #[derive(Debug)]
 pub enum RouterError {
+    /// Represents a system-level error.
     SystemError(String),
+    /// Represents an error related to transport or communication.
     TransportError(String),
+    /// Represents an error related to session management.
     SessionError(String),
+    /// Represents an I/O error.
     IoError(std::io::Error),
+    /// Represents a configuration error.
     ConfigError(config::ConfigError),
 }
 

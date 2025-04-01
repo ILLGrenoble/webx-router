@@ -9,18 +9,32 @@ pub static INPROC_SESSION_TOPIC: &str = "session";
 
 pub static APPLICATION_SHUTDOWN_COMMAND: &str = "app:shutdown";
 
+/// The `EventBus` struct provides utilities for creating and managing event bus
+/// publishers and subscribers for inter-process communication.
+/// The event bus uses ZeroMQ sockets for communication and runs in a separate thread.
 pub struct EventBus {
     context: zmq::Context
 }
 
 impl EventBus {
 
+    /// Creates a new `EventBus`.
+    ///
+    /// # Arguments
+    /// * `context` - The ZeroMQ context.
+    ///
+    /// # Returns
+    /// A new `EventBus`.
     pub fn new(context: zmq::Context) -> Self {
         Self {
             context
         }
     }
 
+    /// Runs the event bus.
+    ///
+    /// # Returns
+    /// A `Result` indicating success or failure.
     pub fn run(&self) -> Result<()> {
         // Create proxy subcriber
         let xsub_socket = self.create_proxy_subscriber(&self.context).unwrap();
@@ -56,6 +70,13 @@ impl EventBus {
         Ok(())
     }
 
+    /// Creates a proxy subscriber socket.
+    ///
+    /// # Arguments
+    /// * `context` - The ZeroMQ context.
+    ///
+    /// # Returns
+    /// A ZeroMQ subscriber socket.
     fn create_proxy_subscriber(&self, context: &zmq::Context) -> Result<zmq::Socket> {
         let socket = context.socket(zmq::SUB)?;
         socket.set_subscribe(b"")?;
@@ -68,6 +89,13 @@ impl EventBus {
         Ok(socket)
     }
 
+    /// Creates a proxy publisher socket.
+    ///
+    /// # Arguments
+    /// * `context` - The ZeroMQ context.
+    ///
+    /// # Returns
+    /// A ZeroMQ publisher socket.
     fn create_proxy_publisher(&self, context: &zmq::Context) -> Result<zmq::Socket> {
         let socket = context.socket(zmq::PUB)?;
         socket.set_linger(0)?;
@@ -79,6 +107,13 @@ impl EventBus {
         Ok(socket)
     }
 
+    /// Creates a new event bus publisher socket.
+    ///
+    /// # Arguments
+    /// * `context` - The ZeroMQ context.
+    ///
+    /// # Returns
+    /// A ZeroMQ publisher socket.
     pub fn create_event_publisher(context: &zmq::Context) -> Result<zmq::Socket> {
         let socket = context.socket(zmq::PUB)?;
         socket.set_linger(0)?;
@@ -91,6 +126,14 @@ impl EventBus {
         Ok(socket)
     }
 
+    /// Creates a new event bus subscriber socket.
+    ///
+    /// # Arguments
+    /// * `context` - The ZeroMQ context.
+    /// * `topics` - A list of topics to subscribe to.
+    ///
+    /// # Returns
+    /// A ZeroMQ subscriber socket.
     pub fn create_event_subscriber(context: &zmq::Context, topics: &[&str]) -> Result<zmq::Socket> {
         let socket = context.socket(zmq::SUB)?;
         if topics.is_empty() {

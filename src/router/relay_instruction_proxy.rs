@@ -3,13 +3,17 @@ use std::process;
 use std::ops::Deref;
 use hex;
 
+/// Handles the forwarding of instructions from the relay to the engines.
 pub struct RelayInstructionProxy {
     context: zmq::Context,
     is_running: bool,
 }
 
 impl RelayInstructionProxy {
-
+    /// Creates a new instance of the `RelayInstructionProxy`.
+    ///
+    /// # Arguments
+    /// * `context` - The ZeroMQ context used for communication.
     pub fn new(context: zmq::Context) -> Self {
         Self {
             context,
@@ -17,6 +21,13 @@ impl RelayInstructionProxy {
         }
     }
 
+    /// Runs the relay instruction proxy, forwarding messages between components.
+    ///
+    /// # Arguments
+    /// * `settings` - Reference to the application settings.
+    ///
+    /// # Returns
+    /// * `Result<()>` - Indicates success or failure of the operation.
     pub fn run(&mut self, settings: &Settings) -> Result<()> {
         let transport = &settings.transport;
 
@@ -61,6 +72,13 @@ impl RelayInstructionProxy {
         Ok(())
     }
 
+    /// Creates a ZeroMQ SUB socket for receiving relay instructions.
+    ///
+    /// # Arguments
+    /// * `port` - The port to bind the socket to.
+    ///
+    /// # Returns
+    /// * `Result<zmq::Socket>` - The created and bound socket or an error.
     fn create_relay_sub_socket(&self, port: u32) -> Result<zmq::Socket> {
         let socket = self.context.socket(zmq::SUB)?;
         // Listen on all topics
@@ -79,6 +97,13 @@ impl RelayInstructionProxy {
         Ok(socket)
     }
 
+    /// Creates a ZeroMQ PUB socket for sending instructions to the engine.
+    ///
+    /// # Arguments
+    /// * `path` - The IPC path to bind the socket to.
+    ///
+    /// # Returns
+    /// * `Result<zmq::Socket>` - The created and bound socket or an error.
     fn create_engine_pub_socket(&self, path: &str) -> Result<zmq::Socket> {
         let socket = self.context.socket(zmq::PUB)?;
         socket.set_linger(0)?;
@@ -94,6 +119,10 @@ impl RelayInstructionProxy {
         Ok(socket)
     }
 
+    /// Reads messages from the event bus and handles shutdown commands.
+    ///
+    /// # Arguments
+    /// * `event_bus_sub_socket` - The ZeroMQ socket subscribed to the event bus.
     fn read_event_bus(&mut self, event_bus_sub_socket: &zmq::Socket) {
         let mut msg = zmq::Message::new();
 
@@ -111,6 +140,14 @@ impl RelayInstructionProxy {
         }
     }
 
+    /// Forwards relay instructions to the engines and extracts session ID (to update usage times for the session).
+    ///
+    /// # Arguments
+    /// * `relay_sub_socket` - The ZeroMQ socket receiving relay instructions.
+    /// * `engine_pub_socket` - The ZeroMQ socket publishing instructions to the engine.
+    ///
+    /// # Returns
+    /// * `Option<String>` - The session ID if available.
     fn forward_relay_instruction(&self, relay_sub_socket: &zmq::Socket, engine_pub_socket: &zmq::Socket) -> Option<String> {
         let mut msg = zmq::Message::new();
         let mut session_id_option = None;

@@ -3,15 +3,24 @@ use crate::router::Transport;
 
 use std::thread;
 
+/// Represents the main application responsible for initializing and running the WebX Router.
 pub struct Application {
 }
 
 impl Application {
+    /// Creates a new instance of the `Application`.
     pub fn new() -> Self {
         Self {
         }
     }
 
+    /// Runs the application by initializing components and starting the transport layer loop, awaiting requests from the WebX Relay.
+    ///
+    /// # Arguments
+    /// * `settings` - Mutable reference to the application settings.
+    ///
+    /// # Returns
+    /// * `Result<()>` - Indicates success or failure of the operation.
     pub fn run(&self, settings: &mut Settings) -> Result<()> {
         info!("Starting WebX Router...");
 
@@ -37,6 +46,13 @@ impl Application {
         Ok(())
     }
 
+    /// Creates a thread for the event bus and starts its execution.
+    ///
+    /// # Arguments
+    /// * `context` - The ZeroMQ context used for communication.
+    ///
+    /// # Returns
+    /// * `thread::JoinHandle<()>` - Handle to the spawned thread.
     fn create_event_bus_thread(&self, context: zmq::Context) -> thread::JoinHandle<()> {
         thread::spawn(move ||  {
             if let Err(error) = EventBus::new(context).run() {
@@ -45,6 +61,10 @@ impl Application {
         })
     }
 
+    /// Sets up a shutdown publisher that listens for CTRL-C signals and sends a shutdown command on the event bus.
+    ///
+    /// # Arguments
+    /// * `context` - Reference to the ZeroMQ context used for communication.
     fn create_shutdown_publisher(&self, context: &zmq::Context) {
         let socket = EventBus::create_event_publisher(context).unwrap();
         ctrlc::set_handler(move || {

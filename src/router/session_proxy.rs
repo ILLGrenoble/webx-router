@@ -6,6 +6,10 @@ use std::process;
 use std::vec::Vec;
 use base64::engine::{general_purpose::STANDARD, Engine};
 
+/// The `SessionProxy` manages session-related requests such as requesting a new X11 session from the WebX Session Manager (using
+/// credentials passed by the client), removing an existing session, connecting a client to an existing session, disconnecting a client from a session
+/// and pinging a session to check if it is still active. 
+/// It runs in a separate thread listening to requests from the WebX Relay.
 pub struct SessionProxy {
     context: zmq::Context,
     service: SessionService,
@@ -13,7 +17,10 @@ pub struct SessionProxy {
 }
 
 impl SessionProxy {
-
+    /// Creates a new `SessionProxy` instance.
+    ///
+    /// # Arguments
+    /// * `context` - The ZeroMQ context.
     pub fn new(context: zmq::Context) -> Self {
         Self {
             context,
@@ -22,6 +29,13 @@ impl SessionProxy {
         }
     }
 
+    /// Runs the session proxy, handling incoming requests and events.
+    ///
+    /// # Arguments
+    /// * `settings` - The application settings.
+    ///
+    /// # Returns
+    /// A result indicating success or failure.
     pub fn run(&mut self, settings: &Settings) -> Result<()> {
         let transport = &settings.transport;
 
@@ -58,6 +72,14 @@ impl SessionProxy {
         Ok(())
     }
 
+    /// Creates a secure REP socket for handling session requests.
+    ///
+    /// # Arguments
+    /// * `port` - The port to bind the socket to.
+    /// * `secret_key_string` - The secret key for securing the socket.
+    ///
+    /// # Returns
+    /// The created ZeroMQ socket.
     fn create_secure_rep_socket(&self, port: u32, secret_key_string: &str) -> Result<zmq::Socket> {
         let socket = self.context.socket(zmq::REP)?;
         socket.set_linger(0)?;
@@ -79,6 +101,10 @@ impl SessionProxy {
         Ok(socket)
     }
 
+    /// Reads and processes messages from the event bus.
+    ///
+    /// # Arguments
+    /// * `event_bus_sub_socket` - The ZeroMQ subscription socket for the event bus.
     fn read_event_bus(&mut self, event_bus_sub_socket: &zmq::Socket) {
         let mut msg = zmq::Message::new();
 
@@ -105,6 +131,12 @@ impl SessionProxy {
         }
     }
 
+    /// Handles secure session requests. Requests are either forwarded to the WebX Session Manager to create/remove X11 sessions
+    /// or forwarded to a specific WebX Engine.
+    ///
+    /// # Arguments
+    /// * `secure_rep_socket` - The ZeroMQ REP socket for secure requests.
+    /// * `settings` - The application settings.
     fn handle_secure_request(&mut self, secure_rep_socket: &zmq::Socket, settings: &Settings) {
         let mut msg = zmq::Message::new();
 
@@ -227,6 +259,18 @@ impl SessionProxy {
         }
     }
 
+    /// Retrieves or creates a session and returns its ID.
+    ///
+    /// # Arguments
+    /// * `settings` - The application settings.
+    /// * `username` - The username of the user.
+    /// * `password` - The password of the user.
+    /// * `width` - The width of the session display.
+    /// * `height` - The height of the session display.
+    /// * `keyboard` - The keyboard layout.
+    ///
+    /// # Returns
+    /// A string containing the session ID or an error message.
     fn get_or_create_session(&mut self, settings: &Settings, username: &str, password: &str, width: u32, height: u32, keyboard: &str) -> String {
         match self.service.get_or_create_session(settings, username, password, width, height, keyboard, &self.context) {
             Ok(session) => format!("0,{}", session.id()),
@@ -237,6 +281,13 @@ impl SessionProxy {
         }
     }
 
+    /// Pings a session to check if it is active.
+    ///
+    /// # Arguments
+    /// * `session_id` - The ID of the session to ping.
+    ///
+    /// # Returns
+    /// A string indicating the ping result.
     fn ping_session(&mut self, session_id: &str) -> String {
         match self.service.ping_session(session_id, &self.context) {
             Ok(_) => format!("pong,{}", session_id),
@@ -247,6 +298,13 @@ impl SessionProxy {
         }
     }
 
+    /// Decodes a session creation command.
+    ///
+    /// # Arguments
+    /// * `message_parts` - The parts of the command message.
+    ///
+    /// # Returns
+    /// A tuple containing the decoded parameters or an error.
     fn decode_create_command(&self, message_parts: &Vec<&str>) -> Result<(String, String, u32, u32, String)> {
         if message_parts.len() == 6 {
             let username_base64 = message_parts[1];
@@ -265,6 +323,13 @@ impl SessionProxy {
         }
     }
 
+    /// Decodes a Base64-encoded string.
+    ///
+    /// # Arguments
+    /// * `input` - The Base64-encoded string.
+    ///
+    /// # Returns
+    /// The decoded string.
     fn decode_base64(&self, input: &str) -> Result<String> {
         let decoded_bytes = STANDARD.decode(input)?;
 

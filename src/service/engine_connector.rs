@@ -1,17 +1,30 @@
 use crate::common::*;
 
+/// Handles communication with the WebX Engine using ZeroMQ sockets.
 pub struct EngineConnector {
     context: zmq::Context,
 }
 
 impl EngineConnector {
-
+    /// Creates a new instance of the `EngineConnector`.
+    ///
+    /// # Arguments
+    /// * `context` - The ZeroMQ context used for communication.
     pub fn new(context: zmq::Context) -> Self {
         Self {
             context,
         }
     }
 
+    /// Creates a ZeeroMQ socket and sends a request to the WebX Engine and waits for a response.
+    /// After receiving the response, it disconnects the socket.
+    ///
+    /// # Arguments
+    /// * `path` - The IPC path to connect to the engine.
+    /// * `request` - The request message to send.
+    ///
+    /// # Returns
+    /// * `Result<String>` - The response message or an error.
     pub fn send_request(&self, path: &str, request: &str) -> Result<String> {
         // Create REQ socket
         let req_socket = self.create_req_socket(path)?;
@@ -38,6 +51,13 @@ impl EngineConnector {
         Ok(message.to_string())
     }
 
+    /// Creates a ZeroMQ REQ socket and connects it to the specified path.
+    ///
+    /// # Arguments
+    /// * `path` - The IPC path to connect to.
+    ///
+    /// # Returns
+    /// * `Result<zmq::Socket>` - The created and connected socket or an error.
     fn create_req_socket(&self, path: &str) -> Result<zmq::Socket> {
         let socket = self.context.socket(zmq::REQ)?;
         socket.set_linger(0)?;
@@ -52,6 +72,11 @@ impl EngineConnector {
         Ok(socket)
     }
 
+    /// Disconnects a ZeroMQ REQ socket from the specified path.
+    ///
+    /// # Arguments
+    /// * `socket` - The socket to disconnect.
+    /// * `path` - The IPC path to disconnect from.
     fn disconnect_req_socket(&self, socket: &zmq::Socket, path: &str) {
         let address = format!("ipc://{}", path);
         match socket.disconnect(&address) {

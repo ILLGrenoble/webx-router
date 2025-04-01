@@ -1,12 +1,16 @@
 use crate::common::*;
 
+/// Handles client connections and communication using a REQ-REP pattern.
 pub struct ClientConnector {
     context: zmq::Context,
     is_running: bool,
 }
 
 impl ClientConnector {
-
+    /// Creates a new instance of the `ClientConnector`.
+    ///
+    /// # Arguments
+    /// * `context` - The ZeroMQ context used for communication.
     pub fn new(context: zmq::Context) -> Self {
         Self {
             context,
@@ -14,6 +18,13 @@ impl ClientConnector {
         }
     }
 
+    /// Runs the client connector, handling client requests and event bus messages.
+    ///
+    /// # Arguments
+    /// * `settings` - Reference to the application settings.
+    ///
+    /// # Returns
+    /// * `Result<()>` - Indicates success or failure of the operation.
     pub fn run(&mut self, settings: &Settings) -> Result<()> {
         let transport = &settings.transport;
 
@@ -49,6 +60,13 @@ impl ClientConnector {
         Ok(())
     }
 
+    /// Creates a ZeroMQ REP socket for handling client requests.
+    ///
+    /// # Arguments
+    /// * `port` - The port to bind the socket to.
+    ///
+    /// # Returns
+    /// * `Result<zmq::Socket>` - The created and bound socket or an error.
     fn create_rep_socket(&self, port: u32) -> Result<zmq::Socket> {
         let socket = self.context.socket(zmq::REP)?;
         socket.set_linger(0)?;
@@ -62,6 +80,10 @@ impl ClientConnector {
         Ok(socket)
     }
 
+    /// Reads messages from the event bus and handles shutdown commands.
+    ///
+    /// # Arguments
+    /// * `event_bus_sub_socket` - The ZeroMQ socket subscribed to the event bus.
     fn read_event_bus(&mut self, event_bus_sub_socket: &zmq::Socket) {
         let mut msg = zmq::Message::new();
 
@@ -79,6 +101,11 @@ impl ClientConnector {
         }
     }
     
+    /// Handles client requests received on the REP socket.
+    ///
+    /// # Arguments
+    /// * `rep_socket` - The ZeroMQ socket for handling client requests.
+    /// * `transport` - Reference to the transport settings.
     fn handle_request(&self, rep_socket: &zmq::Socket, transport: &TransportSettings) {
         let mut msg = zmq::Message::new();
 

@@ -1,13 +1,17 @@
 use crate::common::*;
 use std::process;
 
+/// Handles the forwarding of messages from the engines to the relay.
 pub struct EngineMessageProxy {
     context: zmq::Context,
     is_running: bool,
 }
 
 impl EngineMessageProxy {
-
+    /// Creates a new instance of the `EngineMessageProxy`.
+    ///
+    /// # Arguments
+    /// * `context` - The ZeroMQ context used for communication.
     pub fn new(context: zmq::Context) -> Self {
         Self {
             context,
@@ -15,6 +19,13 @@ impl EngineMessageProxy {
         }
     }
 
+    /// Runs the engine message proxy, forwarding messages between components.
+    ///
+    /// # Arguments
+    /// * `settings` - Reference to the application settings.
+    ///
+    /// # Returns
+    /// * `Result<()>` - Indicates success or failure of the operation.
     pub fn run(&mut self, settings: &Settings) -> Result<()> {
         let transport = &settings.transport;
         
@@ -50,6 +61,13 @@ impl EngineMessageProxy {
         Ok(())
     }
 
+    /// Creates a ZeroMQ PUB socket for publishing messages to the relay.
+    ///
+    /// # Arguments
+    /// * `port` - The port to bind the socket to.
+    ///
+    /// # Returns
+    /// * `Result<zmq::Socket>` - The created and bound socket or an error.
     fn create_relay_publisher_socket(&self, port: u32) -> Result<zmq::Socket> {
         let socket = self.context.socket(zmq::PUB)?;
         socket.set_linger(0)?;
@@ -65,6 +83,13 @@ impl EngineMessageProxy {
         Ok(socket)
     }
 
+    /// Creates a ZeroMQ SUB socket for subscribing to engine messages.
+    ///
+    /// # Arguments
+    /// * `path` - The IPC path to bind the socket to.
+    ///
+    /// # Returns
+    /// * `Result<zmq::Socket>` - The created and bound socket or an error.
     fn create_engine_subscriber_socket(&self, path: &str) -> Result<zmq::Socket> {
         let socket = self.context.socket(zmq::SUB)?;
         // Listen on all topics
@@ -82,6 +107,10 @@ impl EngineMessageProxy {
         Ok(socket)
     }
 
+    /// Reads messages from the event bus and handles shutdown commands.
+    ///
+    /// # Arguments
+    /// * `event_bus_sub_socket` - The ZeroMQ socket subscribed to the event bus.
     fn read_event_bus(&mut self, event_bus_sub_socket: &zmq::Socket) {
         let mut msg = zmq::Message::new();
 
@@ -99,6 +128,11 @@ impl EngineMessageProxy {
         }
     }
 
+    /// Forwards messages from engines to the relay.
+    ///
+    /// # Arguments
+    /// * `engine_subscriber_socket` - The ZeroMQ socket receiving engine messages.
+    /// * `relay_publisher_socket` - The ZeroMQ socket publishing messages to the relay.
     fn forward_engine_message(&self, engine_subscriber_socket: &zmq::Socket, relay_publisher_socket: &zmq::Socket) {
         let mut msg = zmq::Message::new();
 
