@@ -62,10 +62,10 @@ jobs:
       - name: Upload Debian artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: debian-packages
+          name: debian-packages-${{ github.run_id }}
           path: ./debian-packages/
 
       - name: Upload Debian packages as Release assets
         uses: softprops/action-gh-release@v1
         with:
-          files: debian-packages/*.deb
+          files: debian-packages-${{ github.run_id }}/*.deb
