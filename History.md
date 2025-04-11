@@ -1,3 +1,8 @@
+1.1.0 11/04/2025
+================
+ * Modify default config so that sessions aren't deleted on inactivity.
+ * fix version of debian in Dockerfile.debian (maintain compatibility with local ci/cd server)
+
 1.0.0 01/04/2025
 ================
  * Build releases for Ubuntu 20 and arm architecture
