@@ -22,7 +22,7 @@ transport:
 sesman:
   enabled: true
   fallback_display_id: ":0"
-  auto_logout_s: 600
+  auto_logout_s: 0
 engine:
   path: /usr/bin/webx-engine
   logdir: /var/log/webx/engine
