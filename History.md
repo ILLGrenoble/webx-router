@@ -1,3 +1,7 @@
+1.2.0 25/04/2025
+================
+ * Pass engine parameters in session creation command. These are converted into environment variables when spawning an engine.
+
 1.1.0 11/04/2025
 ================
  * Modify default config so that sessions aren't deleted on inactivity.
