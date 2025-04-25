@@ -5,6 +5,7 @@ use uuid::Uuid;
 use std::process::{Command, Stdio};
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::fs::File;
+use std::collections::HashMap;
 
 /// The `SessionService` manages user WebX sessions, including creating, stopping,
 /// and validating sessions. It interacts with the WebX Session Manager and the WebX Engine.
@@ -39,7 +40,7 @@ impl SessionService {
     ///
     /// # Returns
     /// A reference to the created or retrieved session.
-    pub fn get_or_create_session(&mut self, settings: &Settings, username: &str, password: &str, width: u32, height: u32, keyboard: &str, context: &zmq::Context) -> Result<&Session> {
+    pub fn get_or_create_session(&mut self, settings: &Settings, username: &str, password: &str, width: u32, height: u32, keyboard: &str, engine_parameters: &HashMap<String, String>, context: &zmq::Context) -> Result<&Session> {
         // See if we are using the session manager
         let x11_session;
         if settings.sesman.enabled {
@@ -57,7 +58,7 @@ impl SessionService {
             self.session_container.remove_session_for_user(username);
 
             // Create new session for the user
-            self.create_session(x11_session, settings, keyboard, context)?;
+            self.create_session(x11_session, settings, keyboard, engine_parameters, context)?;
         } 
 
         // Return the session
@@ -152,11 +153,11 @@ impl SessionService {
     ///
     /// # Returns
     /// A result indicating success or failure.
-    fn create_session(&mut self, x11_session: X11Session, settings: &Settings, keyboard: &str, context: &zmq::Context)  -> Result<()> {
+    fn create_session(&mut self, x11_session: X11Session, settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>, context: &zmq::Context)  -> Result<()> {
         debug!("Creating session for user \"{}\" on display {}", &x11_session.username(), &x11_session.display_id());
 
         // Spawn a new WebX Engine
-        let engine = self.spawn_engine(&x11_session, settings, keyboard)?;
+        let engine = self.spawn_engine(&x11_session, settings, keyboard, engine_parameters)?;
 
         let mut session = Session::new(x11_session, engine);
 
@@ -232,7 +233,7 @@ impl SessionService {
     ///
     /// # Returns
     /// The spawned WebX Engine instance.
-    fn spawn_engine(&self, x11_session: &X11Session, settings: &Settings, keyboard: &str) -> Result<Engine> {
+    fn spawn_engine(&self, x11_session: &X11Session, settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>) -> Result<Engine> {
         let engine_path = &settings.engine.path;
         let engine_logdir = &settings.engine.logdir;
         let message_proxy_path = &settings.transport.ipc.message_proxy;
@@ -261,7 +262,8 @@ impl SessionService {
             .arg(keyboard)
             .stdout(file_out)
             .env("DISPLAY", x11_session.display_id())
-            .env("WEBX_ENGINE_LOG", "debug")
+            .env("WEBX_ENGINE_LOG_LEVEL", "debug")
+            .envs(self.convert_engine_parameters(engine_parameters))
             .env("WEBX_ENGINE_IPC_SESSION_CONNECTOR_PATH", &session_connector_path)
             .env("WEBX_ENGINE_IPC_MESSAGE_PROXY_PATH", message_proxy_path)
             .env("WEBX_ENGINE_IPC_INSTRUCTION_PROXY_PATH", instruction_proxy_path)
@@ -315,6 +317,25 @@ impl SessionService {
             }
         }
         Err(RouterError::SessionError(connection_error))
+    }
+
+    /// Converts engine parameters into environment variables.
+    /// Keys are converted from camelCase to SNAKE_CASE and prefixed with "WEBX_ENGINE_".
+    ///
+    /// # Arguments
+    /// * `parameters` - HashMap containing the engine parameters
+    ///
+    /// # Returns
+    /// A vector of tuples containing the environment variable name and value
+    fn convert_engine_parameters(&self, parameters: &HashMap<String, String>) -> Vec<(String, String)> {
+        parameters
+            .iter()
+            .map(|(key, value)| {
+                let snake_case = to_snake_case(key);
+                let env_key = format!("WEBX_ENGINE_{}", snake_case.to_uppercase());
+                (env_key, value.clone())
+            })
+            .collect()
     }
 
 }

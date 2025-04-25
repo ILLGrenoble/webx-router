@@ -4,6 +4,8 @@ use crate::service::SessionService;
 use std::str;
 use std::process;
 use std::vec::Vec;
+use std::collections::HashMap;
+
 use base64::engine::{general_purpose::STANDARD, Engine};
 
 /// The `SessionProxy` manages session-related requests such as requesting a new X11 session from the WebX Session Manager (using
@@ -174,11 +176,11 @@ impl SessionProxy {
 
         } else if message_parts[0] == "create" {
             match self.decode_create_command(&message_parts) {
-                Ok((username, password, width, height, keyboard)) => {
+                Ok((username, password, width, height, keyboard, engine_parameters)) => {
                     info!("Got session create command for user \"{}\"", username);
 
                     // Request session from WebX Session Manager
-                    let message = self.get_or_create_session(settings, &username, &password, width, height, &keyboard);
+                    let message = self.get_or_create_session(settings, &username, &password, width, height, &keyboard, &engine_parameters);
 
                     // Send message response
                     if let Err(error) = secure_rep_socket.send(message.as_str(), 0) {
@@ -271,8 +273,8 @@ impl SessionProxy {
     ///
     /// # Returns
     /// A string containing the session ID or an error message.
-    fn get_or_create_session(&mut self, settings: &Settings, username: &str, password: &str, width: u32, height: u32, keyboard: &str) -> String {
-        match self.service.get_or_create_session(settings, username, password, width, height, keyboard, &self.context) {
+    fn get_or_create_session(&mut self, settings: &Settings, username: &str, password: &str, width: u32, height: u32, keyboard: &str, engine_parameters: &HashMap<String, String>) -> String {
+        match self.service.get_or_create_session(settings, username, password, width, height, keyboard, engine_parameters, &self.context) {
             Ok(session) => format!("0,{}", session.id()),
             Err(error) => {
                 error!("Failed to create session for user {}: {}", username, error);
@@ -305,8 +307,8 @@ impl SessionProxy {
     ///
     /// # Returns
     /// A tuple containing the decoded parameters or an error.
-    fn decode_create_command(&self, message_parts: &Vec<&str>) -> Result<(String, String, u32, u32, String)> {
-        if message_parts.len() == 6 {
+    fn decode_create_command(&self, message_parts: &Vec<&str>) -> Result<(String, String, u32, u32, String, HashMap<String, String>)> {
+        if message_parts.len() >= 6 {
             let username_base64 = message_parts[1];
             let password_base64 = message_parts[2];
             let username = self.decode_base64(username_base64)?;
@@ -316,7 +318,22 @@ impl SessionProxy {
             let height = message_parts[4].to_string().parse::<u32>()?;
             let keyboard = message_parts[5].to_string();
 
-            Ok((username, password, width, height, keyboard))
+            let mut engine_parameters = HashMap::new();
+            if message_parts.len() > 6 {
+                for param in message_parts.iter().skip(6) {
+                    match param.split_once('=') {
+                        Some((key, value)) => {
+                            engine_parameters.insert(key.to_string(), value.to_string());
+                        }
+                        None => {
+                            return Err(RouterError::SessionError(format!("Failed to parse the engine parameter: {}", param)));
+                        }
+                    }
+                }
+                debug!("Parsed engine parameters: {:?}", engine_parameters);
+            }
+    
+            Ok((username, password, width, height, keyboard, engine_parameters))
 
         } else {
             Err(RouterError::SessionError(format!("Incorrect number of parameters. Got {}, expected 6", message_parts.len())))
