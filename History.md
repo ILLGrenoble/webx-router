@@ -1,3 +1,7 @@
+1.3.0 07/05/2025
+================
+ * Remove specific limit on number of parameters expected for session commands (allow for future additional parameters)
+
 1.2.0 25/04/2025
 ================
  * Pass engine parameters in session creation command. These are converted into environment variables when spawning an engine.
