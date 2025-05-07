@@ -202,7 +202,7 @@ impl SessionProxy {
         } else if message_parts[0] == "connect" {
 
             // Verify that we have a sessionId
-            if message_parts.len() != 2 {
+            if message_parts.len() < 2 {
                 error!("Received invalid connect command");
 
             } else {
@@ -226,7 +226,7 @@ impl SessionProxy {
         } else if message_parts[0] == "disconnect" {
 
             // Verify that we have a sessionId
-            if message_parts.len() != 3 {
+            if message_parts.len() < 3 {
                 error!("Received invalid disconnect command");
 
             } else {
