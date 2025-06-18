@@ -1,10 +1,15 @@
 use crate::common::*;
-use crate::service::SessionService;
+use crate::authentication::Credentials;
+use crate::service::EngineSessionService;
+use crate::sesman::ScreenResolution;
 
 use std::str;
+use std::str::FromStr;
 use std::process;
 use std::vec::Vec;
 use std::collections::HashMap;
+use uuid::Uuid;
+use nix::unistd::User;
 
 use base64::engine::{general_purpose::STANDARD, Engine};
 
@@ -14,7 +19,7 @@ use base64::engine::{general_purpose::STANDARD, Engine};
 /// It runs in a separate thread listening to requests from the WebX Relay.
 pub struct SessionProxy {
     context: zmq::Context,
-    service: SessionService,
+    service: EngineSessionService,
     is_running: bool,
 }
 
@@ -23,10 +28,10 @@ impl SessionProxy {
     ///
     /// # Arguments
     /// * `context` - The ZeroMQ context.
-    pub fn new(context: zmq::Context) -> Self {
+    pub fn new(context: zmq::Context, settings: &SesManSettings, webx_user: User) -> Self {
         Self {
             context,
-            service: SessionService::new(),
+            service: EngineSessionService::new(settings, webx_user),
             is_running: false,
         }
     }
@@ -65,7 +70,7 @@ impl SessionProxy {
                 }
 
                 // Cleanup inactive sessions
-                self.service.cleanup_inactive_sessions(settings, &self.context);
+                self.service.cleanup_inactive_engine_sessions(settings);
             }
         }
 
@@ -119,13 +124,16 @@ impl SessionProxy {
                 self.is_running = false;
 
                 // Close all sessions gracefully
-                self.service.stop_sessions();
+                self.service.shutdown();
 
             } else if event.starts_with(INPROC_SESSION_TOPIC) {
                 let message_text = msg.as_str().unwrap();
                 let message_parts = message_text.split(':').collect::<Vec<&str>>();
-                let session_id = message_parts[1];
-                self.service.update_session_activity(session_id);
+                let session_id_string = message_parts[1];
+                match self.string_to_uuid(session_id_string) {
+                    Ok(session_id) => self.service.update_engine_session_activity(&session_id),
+                    Err(error) => warn!("Cannot update session activity: {}", error)
+                }
 
             } else {
                 warn!("Got unknown event bus command: {}", event);
@@ -163,13 +171,18 @@ impl SessionProxy {
                 }
 
             } else {
-                let session_id = message_parts[1];
-                debug!("Got ping for session {}", session_id);
+                let session_id_string = message_parts[1];
+                trace!("Got ping for engine {}", session_id_string);
 
                 // Ping the session and get a string response
-                let ping_response = self.ping_session(&session_id);
-                if let Err(error) = secure_rep_socket.send(ping_response.as_str(), 0) {
-                    error!("Failed to send session ping message: {}", error);
+                match self.string_to_uuid(session_id_string) {
+                    Ok(session_id) => {
+                        let ping_response = self.ping_engine(&session_id);
+                        if let Err(error) = secure_rep_socket.send(ping_response.as_str(), 0) {
+                            error!("Failed to send session ping message: {}", error);
+                        }
+                    },
+                    Err(error) => warn!("Cannot ping session: {}", error)
                 }
             }
             send_empty = false;
@@ -180,7 +193,18 @@ impl SessionProxy {
                     info!("Got session create command for user \"{}\"", username);
 
                     // Request session from WebX Session Manager
-                    let message = self.get_or_create_session(settings, &username, &password, width, height, &keyboard, &engine_parameters);
+                    let message = self.get_or_create_session(settings, Credentials::new(username, password), ScreenResolution::new(width, height), &keyboard, &engine_parameters);
+
+                    let all_x11_sessions = self.service.get_all_x11_sessions().map(|sessions| {
+                        sessions.iter().map(|session| 
+                            format!("id={},width={},height={},username={},uid={}", 
+                                session.id().simple(),
+                                session.resolution().width(),
+                                session.resolution().height(),
+                                session.account().username(),
+                                session.account().uid())).collect::<Vec<String>>().join("\n")
+                    }).unwrap_or_default();
+                    debug!("All X11 sessions:\n{}", all_x11_sessions);
 
                     // Send message response
                     if let Err(error) = secure_rep_socket.send(message.as_str(), 0) {
@@ -206,21 +230,28 @@ impl SessionProxy {
                 error!("Received invalid connect command");
 
             } else {
-                let session_id = message_parts[1];
-                info!("Got connect for session {}", session_id);
+                let session_id_string = message_parts[1];
+                info!("Got connect for session {}", session_id_string);
 
-                // Forward the connection request
-                match self.service.send_session_request(&session_id, &self.context, &message_text) {
-                    Ok(response) => {
-                        if let Err(error) = secure_rep_socket.send(response.as_str(), 0) {
-                            error!("Failed to send client connection response: {}", error);
+                match self.string_to_uuid(session_id_string) {
+                    Ok(session_id) => {
+                        // Forward the connection request
+                        match self.service.send_engine_request(&session_id, &self.context, &message_text) {
+                            Ok(response) => {
+                                if let Err(error) = secure_rep_socket.send(response.as_str(), 0) {
+                                    error!("Failed to send client connection response: {}", error);
+                                }
+                                send_empty = false;
+                            }
+                            Err(error) => {
+                                error!("Failed to send client connection request: {}", error);
+                            }
                         }
-                        send_empty = false;
-                    }
-                    Err(error) => {
-                        error!("Failed to send client connection request: {}", error);
-                    }
+
+                    },
+                    Err(error) => warn!("Cannot send client connection request: {}", error)
                 }
+
             }
 
         } else if message_parts[0] == "disconnect" {
@@ -230,21 +261,26 @@ impl SessionProxy {
                 error!("Received invalid disconnect command");
 
             } else {
-                let session_id = message_parts[1];
+                let session_id_string = message_parts[1];
                 let client_id = message_parts[2];
-                info!("Got disconnect from client {} for session {}", client_id, session_id);
+                info!("Got disconnect from client {} for session {}", client_id, session_id_string);
 
-                // Forward the disconnection request
-                match self.service.send_session_request(&session_id, &self.context, &message_text) {
-                    Ok(response) => {
-                        if let Err(error) = secure_rep_socket.send(response.as_str(), 0) {
-                            error!("Failed to send client disconnection response: {}", error);
+                match self.string_to_uuid(session_id_string) {
+                    Ok(session_id) => {
+                        // Forward the disconnection request
+                        match self.service.send_engine_request(&session_id, &self.context, &message_text) {
+                            Ok(response) => {
+                                if let Err(error) = secure_rep_socket.send(response.as_str(), 0) {
+                                    error!("Failed to send client disconnection response: {}", error);
+                                }
+                                send_empty = false;
+                            }
+                            Err(error) => {
+                                error!("Failed to send client disconnection request: {}", error);
+                            }
                         }
-                        send_empty = false;
-                    }
-                    Err(error) => {
-                        error!("Failed to send client disconnection request: {}", error);
-                    }
+                    },
+                    Err(error) => warn!("Cannot send client disconnection request: {}", error)
                 }
             }
 
@@ -273,11 +309,11 @@ impl SessionProxy {
     ///
     /// # Returns
     /// A string containing the session ID or an error message.
-    fn get_or_create_session(&mut self, settings: &Settings, username: &str, password: &str, width: u32, height: u32, keyboard: &str, engine_parameters: &HashMap<String, String>) -> String {
-        match self.service.get_or_create_session(settings, username, password, width, height, keyboard, engine_parameters, &self.context) {
-            Ok(session) => format!("0,{}", session.id()),
+    fn get_or_create_session(&mut self, settings: &Settings, credentials: Credentials, resolution: ScreenResolution, keyboard: &str, engine_parameters: &HashMap<String, String>) -> String {
+        match self.service.get_or_create_engine_session(settings, &credentials, resolution, keyboard, engine_parameters, &self.context) {
+            Ok(session) => format!("0,{}", session.id().simple()),
             Err(error) => {
-                error!("Failed to create session for user {}: {}", username, error);
+                error!("Failed to create session for user {}: {}", credentials.username(), error);
                 format!("1,{}", error)
             }
         }
@@ -290,8 +326,8 @@ impl SessionProxy {
     ///
     /// # Returns
     /// A string indicating the ping result.
-    fn ping_session(&mut self, session_id: &str) -> String {
-        match self.service.ping_session(session_id, &self.context) {
+    fn ping_engine(&mut self, session_id: &Uuid) -> String {
+        match self.service.ping_engine(session_id, &self.context) {
             Ok(_) => format!("pong,{}", session_id),
             Err(error) => {
                 error!("Failed to ping session with id {}: {}", session_id, error);
@@ -326,7 +362,7 @@ impl SessionProxy {
                             engine_parameters.insert(key.to_string(), value.to_string());
                         }
                         None => {
-                            return Err(RouterError::SessionError(format!("Failed to parse the engine parameter: {}", param)));
+                            return Err(RouterError::EngineSessionError(format!("Failed to parse the engine parameter: {}", param)));
                         }
                     }
                 }
@@ -336,7 +372,7 @@ impl SessionProxy {
             Ok((username, password, width, height, keyboard, engine_parameters))
 
         } else {
-            Err(RouterError::SessionError(format!("Incorrect number of parameters. Got {}, expected 6", message_parts.len())))
+            Err(RouterError::EngineSessionError(format!("Incorrect number of parameters. Got {}, expected 6", message_parts.len())))
         }
     }
 
@@ -353,5 +389,10 @@ impl SessionProxy {
         let output = str::from_utf8(&decoded_bytes)?;
 
         Ok(output.to_string())
+    }
+
+    fn string_to_uuid(&self, id_string: &str) -> Result<Uuid> {
+        Uuid::from_str(id_string)
+            .map_err(|_| RouterError::SystemError(format!("Invalid session id {} provided", id_string)))
     }
 }

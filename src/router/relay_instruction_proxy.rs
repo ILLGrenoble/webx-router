@@ -1,4 +1,5 @@
 use crate::common::*;
+use crate::fs;
 use std::process;
 use std::ops::Deref;
 use hex;
@@ -113,10 +114,22 @@ impl RelayInstructionProxy {
             process::exit(1);
         }
 
-        // Make sure socket is accessible only to current user
-        System::chmod(path, 0o700)?;
+        // Make sure the socket is owned by the 'webx' user
+        match System::get_user("webx") {
+            Some(user) => {
+                // Change ownership of the socket to 'webx' user
+                fs::chown(path, user.uid.as_raw(), user.gid.as_raw())?;
 
-        Ok(socket)
+                // Make sure socket is accessible only to current user
+                fs::chmod(path, 0o700)?;
+
+                Ok(socket)
+            },
+            None => {
+                error!("Cannot created engine PUB socket, user 'webx' not found");
+                process::exit(1);
+            }
+        }
     }
 
     /// Reads messages from the event bus and handles shutdown commands.

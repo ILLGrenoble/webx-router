@@ -1,7 +1,5 @@
-pub use session_service::SessionService;
-pub use sesman_connector::SesmanConnector;
+pub use engine_session_service::EngineSessionService;
 pub use engine_connector::EngineConnector;
 
-mod session_service;
-mod sesman_connector;
+mod engine_session_service;
 mod engine_connector;

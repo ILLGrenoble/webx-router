@@ -33,8 +33,6 @@ pub struct IPCSettings {
     pub instruction_proxy: String,
     /// The root path for engine connectors.
     pub engine_connector_root: String,
-    /// The path to the session manager connector.
-    pub sesman_connector: String,
 }
 
 /// The `TransportSettings` struct represents the transport configuration.
@@ -54,18 +52,33 @@ pub struct EngineSettings {
     /// The path to the WebX Engine binary.
     pub path: String,
     /// The directory for storing engine logs.
-    pub logdir: String,
+    pub log_path: String,
+}
+
+/// The `XorgSettings` struct contains settings related to the Xorg server.
+#[derive(Debug, Deserialize, Clone)]
+pub struct XorgSettings {
+    pub log_path: String,
+    pub lock_path: String,
+    pub sessions_path: String,
+    pub config_path: String,
+    pub display_offset: u32,
+    pub window_manager: String,
+}
+
+/// The `AuthenticationSettings` struct contains settings for user authentication.
+#[derive(Debug, Deserialize, Clone)]
+pub struct AuthenticationSettings {
+    pub service: String,
 }
 
 /// The `SesManSettings` struct represents the session manager configuration.
 #[derive(Debug, Deserialize, Clone)]
 pub struct SesManSettings {
-    /// Indicates whether the session manager is enabled.
-    pub enabled: bool,
-    /// The fallback display ID.
-    pub fallback_display_id: String,
     /// The auto-logout timeout in seconds.
     pub auto_logout_s: u64,
+    pub authentication: AuthenticationSettings,
+    pub xorg: XorgSettings,
 }
 
 /// The `FileLoggingSettings` struct represents the file logging configuration.
@@ -105,6 +118,12 @@ pub struct Settings {
 
 static DEFAULT_CONFIG_PATHS: [&str; 2] = ["/etc/webx/webx-router-config.yml", "./config.yml"];
 
+impl XorgSettings {
+    pub fn sessions_path_for_uid(&self, uid: u32) -> String {
+        format!("{}/{}", self.sessions_path, uid)
+    }
+}
+
 impl Settings {
     /// Creates a new `Settings` instance by loading the configuration from a file or environment variables.
     ///
@@ -132,6 +151,46 @@ impl Settings {
     pub fn verify(&self) -> bool {
         // Check that settings are valid for running a router
 
+
+        if self.logging.level.is_empty() {
+            eprintln!("Please specify a logging level (trace, debug, info, error)");
+            return false;
+        }
+
+        if self.logging.file.is_some() {
+            let file = self.logging.file.as_ref().unwrap();
+
+            if file.enabled.unwrap() && file.path.is_empty() {
+                eprintln!("Please specify a path for the log file");
+                return false;
+            }
+        }
+
+        if self.sesman.authentication.service.is_empty() {
+            eprintln!("Please specify a PAM service to use (i.e. login)");
+            return false;
+        }
+
+        if self.sesman.xorg.sessions_path.is_empty() {
+            eprintln!("Please specify a path for where to store the session files (i.e. /run/webx/sessions");
+            return false;
+        }
+
+        if self.sesman.xorg.lock_path.is_empty() {
+            eprintln!("Please specify a path for where to look for x lock files (i.e. /tmp/.X11-unix");
+            return false;
+        }
+
+        if self.sesman.xorg.window_manager.is_empty() {
+            eprintln!("Please specify a path to a command that will launch your chosen session manager");
+            return false;
+        }
+
+        if self.sesman.xorg.log_path.is_empty() {
+            eprintln!("Please specify a path to store the session logs i.e. /var/log/webx/webx-session-manager/sessions");
+            return false;
+        }
+
         // Verify engine path is set
         if self.engine.path.is_empty() {
             error!("Engine path is missing from settings");
@@ -139,8 +198,8 @@ impl Settings {
         }
 
         // Verify engine log dir
-        if let Err(error) = fs::create_dir_all(&self.engine.logdir) {
-            error!("Cannot create engine log directory at {}: {}", self.engine.logdir, error);
+        if let Err(error) = fs::create_dir_all(&self.engine.log_path) {
+            error!("Cannot create engine log directory at {}: {}", self.engine.log_path, error);
             return false;
         }
 

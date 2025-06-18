@@ -1,17 +1,20 @@
 #[macro_use]
 extern crate log;
 extern crate dotenv;
+extern crate pam_client2 as pam_client;
 
 use crate::app::Application;
-use crate::common::Settings;
+use crate::common::{Settings, RouterError, System};
 
+use nix::unistd::{Uid, User};
 use structopt::StructOpt;
 use dotenv::dotenv;
 use std::process;
 
-use std::fs;
-
 mod app;
+mod authentication;
+mod sesman;
+mod fs;
 mod common;
 mod service;
 mod router;
@@ -29,6 +32,20 @@ struct Opt {
 fn main() {
     dotenv().ok();
 
+    if !Uid::effective().is_root() {
+        eprintln!("You must run this executable with root permissions");
+        std::process::exit(1);
+    }
+
+    // Verify we have the webx user
+    let webx_user = match System::get_user("webx") {
+        Some(user) => user,
+        None => {
+            error!("The 'webx' user does not exist. Please create it before running the application.");
+            process::exit(1);
+        }
+    };
+    
     // Parse command-line arguments.
     let opt = Opt::from_args();
 
@@ -36,8 +53,13 @@ fn main() {
     let mut settings = Settings::new(&opt.config).expect("Loaded settings");
 
     // Initialize logging based on the settings.
-    if let Err(e) = setup_logging(&settings) {
-        eprintln!("Failed to initialize logging: {}", e);
+    if let Err(error) = setup_logging(&settings) {
+        eprintln!("Failed to initialize logging: {}", error);
+        process::exit(1);
+    }
+
+    if let Err(error) = bootstrap(&settings, &webx_user) {
+        eprintln!("Failed to bootstap application: {}", error);
         process::exit(1);
     }
 
@@ -48,7 +70,7 @@ fn main() {
     }
 
     // Start the application.
-    if let Err(error) = Application::new().run(&mut settings) {
+    if let Err(error) = Application::new().run(&mut settings, webx_user) {
         error!("{}", error);
         process::exit(1);
     }
@@ -86,7 +108,7 @@ fn setup_logging(settings: &Settings) -> Result<(), fern::InitError> {
     // Enable file logging if configured.
     if let Some(file_config) = &logging_config.file {
         if file_config.enabled.unwrap_or(false) {
-            let log_file = fs::OpenOptions::new()
+            let log_file = std::fs::OpenOptions::new()
                 .write(true)
                 .append(true)
                 .create(true)
@@ -97,5 +119,27 @@ fn setup_logging(settings: &Settings) -> Result<(), fern::InitError> {
 
     // Apply the logging configuration.
     base_config.apply()?;
+    Ok(())
+}
+
+/// Performs initial setup for the server, including creating necessary directories
+/// and ensuring correct permissions.
+///
+/// # Arguments
+/// * `settings` - The configuration settings for the server.
+///
+/// # Returns
+/// A `Result` indicating success or an `ApplicationError`.
+fn bootstrap(settings: &Settings, webx_user: &User) -> Result<(), RouterError> {
+
+    fs::mkdir(&settings.sesman.xorg.log_path)?;
+
+    // create the sessions directory
+    let sessions_path = &settings.sesman.xorg.sessions_path;
+    fs::mkdir(sessions_path)?;
+    // ensure permissions and ownership are correct
+    fs::chown(sessions_path, webx_user.uid.as_raw(), webx_user.gid.as_raw())?;
+    fs::chmod(sessions_path, 0o755)?;
+    
     Ok(())
 }

@@ -12,12 +12,16 @@ pub enum RouterError {
     SystemError(String),
     /// Represents an error related to transport or communication.
     TransportError(String),
-    /// Represents an error related to session management.
-    SessionError(String),
+    /// Represents an error related to engine sessions.
+    EngineSessionError(String),
+    /// Represents an error related to x11 sessions.
+    X11SessionError(String),
     /// Represents an I/O error.
     IoError(std::io::Error),
     /// Represents a configuration error.
     ConfigError(config::ConfigError),
+    AuthenticationError(String),
+    EnvironmentError(String),
 }
 
 impl Error for RouterError {}
@@ -27,9 +31,12 @@ impl fmt::Display for RouterError {
         match self {
             RouterError::SystemError(message) => write!(formatter, "SystemError: {}", message),
             RouterError::TransportError(message) => write!(formatter, "TransportError: {}", message),
-            RouterError::SessionError(message) => write!(formatter, "SessionError: {}", message),
+            RouterError::EngineSessionError(message) => write!(formatter, "EngineSessionError: {}", message),
+            RouterError::X11SessionError(message) => write!(formatter, "X11SessionError: {}", message),
             RouterError::IoError(err) => writeln!(formatter, "IoError: {}", err),
             RouterError::ConfigError(err) => writeln!(formatter, "ConfigError: {}", err),
+            RouterError::AuthenticationError(message) => writeln!(formatter, "AuthenticationError: {}", message),
+            RouterError::EnvironmentError(message) => writeln!(formatter, "EnvironmentError: {}", message),
         }
     }
 }
@@ -79,5 +86,11 @@ impl From<serde_json::Error> for RouterError {
 impl From<ParseIntError> for RouterError {
     fn from(err: ParseIntError) -> Self {
         RouterError::SystemError(err.to_string())
+    }
+}
+
+impl From<pam_client::Error> for RouterError {
+    fn from(error: pam_client::Error) -> Self {
+        RouterError::AuthenticationError(format!("{}", error))
     }
 }

@@ -30,7 +30,7 @@ impl EngineConnector {
         let req_socket = self.create_req_socket(path)?;
 
         // Send requet message
-        debug!("Sending WebX Engine request at {}", path);
+        trace!("Sending WebX Engine request at {}", path);
         if let Err(error) = req_socket.send(request, 0) {
             error!("Failed to send request to {}: {}", path, error);
             return Err(RouterError::TransportError("Failed to send request to WebX Engine".to_string()));
@@ -44,7 +44,7 @@ impl EngineConnector {
         }
 
         let message = response.as_str().unwrap();
-        debug!("Received response {} from WebX Engine on {}", &message, &path);
+        trace!("Received response {} from WebX Engine on {}", &message, &path);
 
         self.disconnect_req_socket(&req_socket, path);
 

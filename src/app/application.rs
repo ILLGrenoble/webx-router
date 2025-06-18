@@ -2,6 +2,7 @@ use crate::common::{Settings, EventBus, APPLICATION_SHUTDOWN_COMMAND, Result};
 use crate::router::Transport;
 
 use std::thread;
+use nix::unistd::User;
 
 /// Represents the main application responsible for initializing and running the WebX Router.
 pub struct Application {
@@ -21,7 +22,7 @@ impl Application {
     ///
     /// # Returns
     /// * `Result<()>` - Indicates success or failure of the operation.
-    pub fn run(&self, settings: &mut Settings) -> Result<()> {
+    pub fn run(&self, settings: &mut Settings, webx_user: User) -> Result<()> {
         info!("Starting WebX Router...");
 
         // Create ZMQ context
@@ -37,7 +38,7 @@ impl Application {
         let transport = Transport::new(context);
     
         info!("WebX Router running");
-        transport.run(settings)?;
+        transport.run(settings, webx_user)?;
     
         // Join event bus thread
         event_bus_thread.join().unwrap();

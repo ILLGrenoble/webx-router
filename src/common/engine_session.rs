@@ -1,18 +1,20 @@
 use std::fs;
+use uuid::Uuid;
 
-use crate::common::{Engine, X11Session, System};
+use crate::common::{Engine, System};
+use crate::sesman::{X11Session};
 
 use signal_child::Signalable;
 
-/// The `Session` struct represents a user session, including its X11 session and WebX Engine.
-pub struct Session {
+/// The `EngineSession` struct represents a user session, including its X11 session and WebX Engine.
+pub struct EngineSession {
     x11_session: X11Session,
     engine: Engine,
     last_activity: u64,
 }
 
-impl Session {
-    /// Creates a new `Session` instance.
+impl EngineSession {
+    /// Creates a new `EngineSession` instance.
     ///
     /// # Arguments
     /// * `x11_session` - The X11 session details.
@@ -45,8 +47,8 @@ impl Session {
     }
 
     /// Retrieves the session ID.
-    pub fn id(&self) -> &str {
-        return &self.x11_session.session_id();
+    pub fn id(&self) -> &Uuid {
+        return &self.x11_session.id();
     }
 
     /// Retrieves the display ID of the session.
@@ -56,7 +58,7 @@ impl Session {
 
     /// Retrieves the username associated with the session.
     pub fn username(&self) -> &str {
-        return &self.x11_session.username();
+        return &self.x11_session.account().username();
     }
 
     /// Retrieves the WebX Engine instance associated with the session.
@@ -65,7 +67,7 @@ impl Session {
     }
 
     /// Stops the session and cleans up resources.
-    pub fn stop(&mut self) {
+    pub fn stop_engine(&mut self) {
         let ipc_path = self.engine.ipc().to_string();
 
         let process = self.engine.process();
