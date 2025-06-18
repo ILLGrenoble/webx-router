@@ -149,7 +149,7 @@ impl XorgService {
     /// # Returns
     /// A `Result` containing the `ProcessHandle` for the Xorg server or an `RouterError`.
     fn spawn_x_server(&self,
-                      session_id: &Uuid,
+                      session_id: &str,
                       display: u32,
                       resolution: &ScreenResolution,
                       account: &Account,
@@ -158,8 +158,8 @@ impl XorgService {
         let authority_file_path = format!("{}/{}/Xauthority", self.settings.sessions_path, account.uid());
         let display = format!(":{}", display);
         let config = &self.settings.config_path;
-        let stdout_file = File::create(&format!("{}/{}.xorg.out.log", self.settings.log_path, session_id.simple()))?;
-        let stderr_file = File::create(&format!("{}/{}.xorg.err.log", self.settings.log_path, session_id.simple()))?;
+        let stdout_file = File::create(&format!("{}/{}.xorg.out.log", self.settings.log_path, session_id))?;
+        let stderr_file = File::create(&format!("{}/{}.xorg.err.log", self.settings.log_path, session_id))?;
 
         let xdg_run_time_dir = format!("{}/{}", self.settings.sessions_path, account.uid());
         let mut command = Command::new("Xorg");
@@ -224,7 +224,7 @@ impl XorgService {
     /// # Returns
     /// A `Result` containing the `ProcessHandle` for the window manager or an `RouterError`.
     fn spawn_window_manager(&self,
-                            session_id: &Uuid,
+                            session_id: &str,
                             display: u32,
                             account: &Account,
                             environment: &EnvList) -> Result<ProcessHandle> {
@@ -232,8 +232,8 @@ impl XorgService {
 
         let display = format!(":{}", display);
         let log_path = &self.settings.log_path;
-        let stdout_file = File::create(&format!("{}/{}.wm.out.log", log_path, session_id.simple()))?;
-        let stderr_file = File::create(&format!("{}/{}.wm.err.log", log_path, session_id.simple()))?;
+        let stdout_file = File::create(&format!("{}/{}.wm.out.log", log_path, session_id))?;
+        let stderr_file = File::create(&format!("{}/{}.wm.err.log", log_path, session_id))?;
 
         let xdg_run_time_dir = self.settings.sessions_path_for_uid(account.uid());
 
@@ -344,7 +344,7 @@ impl XorgService {
     ///
     /// # Returns
     /// An `Option` containing the `Session` if found, or `None` otherwise.
-    pub fn get_by_id(&self, id: &Uuid) -> Option<X11Session>{
+    pub fn get_by_id(&self, id: &str) -> Option<X11Session>{
         if let Some(sessions) = self.get_all_sessions() {
             let session = sessions
                 .into_iter()
@@ -373,7 +373,7 @@ impl XorgService {
 
         self.create_token(display_id, account, webx_user)?;
 
-        let session_id = Uuid::new_v4();
+        let session_id = Uuid::new_v4().simple().to_string();
 
         // spawn the x server
         let xorg = self.spawn_x_server(&session_id, display_id, &resolution, account, &environment)?;

@@ -5,7 +5,6 @@ use crate::{
     sesman::{X11Session, ScreenResolution, X11SessionManager, XorgService}
 };
 
-use uuid::Uuid;
 use std::process::{Command, Stdio};
 use std::os::unix::{
     io::{FromRawFd, IntoRawFd},
@@ -93,7 +92,7 @@ impl EngineSessionService {
     ///
     /// # Returns
     /// A result indicating success or failure.
-    pub fn ping_engine(&mut self, session_id: &Uuid, context: &zmq::Context) -> Result<()> {
+    pub fn ping_engine(&mut self, session_id: &str, context: &zmq::Context) -> Result<()> {
         if let Some(session) = self.session_container.get_engine_session_by_session_id(session_id) {
             if let Err(error) =  self.validate_engine(session.engine(), context, 1) {
                 // Delete session
@@ -118,7 +117,7 @@ impl EngineSessionService {
     ///
     /// # Returns
     /// The response from the session.
-    pub fn send_engine_request(&mut self, session_id: &Uuid, context: &zmq::Context, request: &str) -> Result<String> {
+    pub fn send_engine_request(&mut self, session_id: &str, context: &zmq::Context, request: &str) -> Result<String> {
         if let Some(session) = self.session_container.get_engine_session_by_session_id(session_id) {
 
             let engine_connector = EngineConnector::new(context.clone());
@@ -132,7 +131,7 @@ impl EngineSessionService {
     ///
     /// # Arguments
     /// * `session_id` - The ID of the session to update.
-    pub fn update_engine_session_activity(&mut self, session_id: &Uuid) {
+    pub fn update_engine_session_activity(&mut self, session_id: &str) {
         if let Some(session) = self.session_container.get_mut_engine_session_by_session_id(session_id) {
             session.update_activity();
         }
@@ -240,7 +239,7 @@ impl EngineSessionService {
             .env("WEBX_ENGINE_IPC_SESSION_CONNECTOR_PATH", &session_connector_path)
             .env("WEBX_ENGINE_IPC_MESSAGE_PROXY_PATH", message_proxy_path)
             .env("WEBX_ENGINE_IPC_INSTRUCTION_PROXY_PATH", instruction_proxy_path)
-            .env("WEBX_ENGINE_SESSION_ID", x11_session.id().simple().to_string())
+            .env("WEBX_ENGINE_SESSION_ID", x11_session.id())
             .uid(webx_user.uid.as_raw())
             .gid(webx_user.gid.as_raw());
 

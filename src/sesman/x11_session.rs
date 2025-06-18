@@ -1,14 +1,12 @@
 use std::fmt;
 
-use uuid::Uuid;
-
 use super::{ProcessHandle, ScreenResolution, Account};
 
 /// The `Session` struct represents a user session managed by the WebX Session Manager.
 /// It contains details about the session, such as the user, session ID, the Xorg process and the Window Manager process.
 #[derive(Clone)]
 pub struct X11Session {
-    id: Uuid,
+    id: String,
     account: Account,
     display_id: String,
     xauthority_file_path: String,
@@ -35,7 +33,7 @@ impl X11Session {
     /// A new `Session` instance.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        id: Uuid,
+        id: String,
         account: Account,
         display_id: String,
         xauthority_file_path: String,
@@ -55,7 +53,7 @@ impl X11Session {
     }
 
     /// Returns the unique identifier for the session.
-    pub fn id(&self) -> &Uuid {
+    pub fn id(&self) -> &str {
         &self.id
     }
 

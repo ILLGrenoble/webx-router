@@ -1,5 +1,4 @@
 use nix::unistd::User;
-use uuid::Uuid;
 
 use crate::{
     authentication::{Authenticator, Credentials},
@@ -89,7 +88,7 @@ impl X11SessionManager {
     ///
     /// # Returns
     /// A `Result` indicating success or an `ApplicationError`.
-    pub fn kill_by_id(&self, id: &Uuid) -> Result<()> {
+    pub fn kill_by_id(&self, id: &str) -> Result<()> {
         if let Some(session) = self.xorg_service.get_by_id(id) {
             // kill the processes
             // the session will be automatically removed by the clean up procedure

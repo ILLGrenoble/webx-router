@@ -1,5 +1,4 @@
 use std::fs;
-use uuid::Uuid;
 
 use crate::common::{Engine, System};
 use crate::sesman::{X11Session};
@@ -47,7 +46,7 @@ impl EngineSession {
     }
 
     /// Retrieves the session ID.
-    pub fn id(&self) -> &Uuid {
+    pub fn id(&self) -> &str {
         return &self.x11_session.id();
     }
 
