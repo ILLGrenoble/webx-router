@@ -1,17 +1,15 @@
 use crate::common::*;
 use crate::fs;
 use std::process;
-use std::ops::Deref;
-use hex;
 
-/// Handles the forwarding of instructions from the relay to the engines.
-pub struct RelayInstructionProxy {
+/// Handles the forwarding of messages from the engines to the relay.
+pub struct MessageProxy {
     context: zmq::Context,
     is_running: bool,
 }
 
-impl RelayInstructionProxy {
-    /// Creates a new instance of the `RelayInstructionProxy`.
+impl MessageProxy {
+    /// Creates a new instance of the `MessageProxy`.
     ///
     /// # Arguments
     /// * `context` - The ZeroMQ context used for communication.
@@ -22,7 +20,7 @@ impl RelayInstructionProxy {
         }
     }
 
-    /// Runs the relay instruction proxy, forwarding messages between components.
+    /// Runs the engine message proxy, forwarding messages between components.
     ///
     /// # Arguments
     /// * `settings` - Reference to the application settings.
@@ -31,66 +29,54 @@ impl RelayInstructionProxy {
     /// * `Result<()>` - Indicates success or failure of the operation.
     pub fn run(&mut self, settings: &Settings) -> Result<()> {
         let transport = &settings.transport;
+        
+        let relay_publisher_socket = self.create_relay_publisher_socket(transport.ports.publisher)?;
 
-        let relay_sub_socket = self.create_relay_sub_socket(transport.ports.collector)?;
-
-        let engine_pub_socket = self.create_engine_pub_socket(&transport.ipc.instruction_proxy)?;
+        let engine_subscriber_socket = self.create_engine_subscriber_socket(&transport.ipc.message_proxy)?;
 
         let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC])?;
 
-        let event_bus_pub_socket = EventBus::create_event_publisher(&self.context)?;
-
         let mut items = [
             event_bus_sub_socket.as_poll_item(zmq::POLLIN),
-            relay_sub_socket.as_poll_item(zmq::POLLIN),
+            engine_subscriber_socket.as_poll_item(zmq::POLLIN),
         ];
 
         self.is_running = true;
         while self.is_running {
             // Poll both sockets
             if zmq::poll(&mut items, -1).is_ok() {
-                // Check for message_bus messages
+                // Check for event bus messages
                 if items[0].is_readable() {
                     self.read_event_bus(&event_bus_sub_socket);
                 }
 
-                // Check for relay PUB messages (if running)
+                // Check for engine SUB messages (if running)
                 if items[1].is_readable() && self.is_running {
-                    match self.forward_relay_instruction(&relay_sub_socket, &engine_pub_socket) {
-                        // Send session id on inproc message queue, to be used by session_proxy
-                        Some(session_id) => {
-                            let session_message = format!("{}:{}", INPROC_SESSION_TOPIC, session_id);
-                            event_bus_pub_socket.send(&session_message, 0).unwrap();
-                        },
-                        None => {}
-                    }
+                    self.forward_engine_message(&engine_subscriber_socket, &relay_publisher_socket);
                 }
             }
         }
 
-        debug!("Stopped Relay Instruction Proxy");
+        debug!("Stopped Message Proxy");
 
         Ok(())
     }
 
-    /// Creates a ZeroMQ SUB socket for receiving relay instructions.
+    /// Creates a ZeroMQ PUB socket for publishing messages to the relay.
     ///
     /// # Arguments
     /// * `port` - The port to bind the socket to.
     ///
     /// # Returns
     /// * `Result<zmq::Socket>` - The created and bound socket or an error.
-    fn create_relay_sub_socket(&self, port: u32) -> Result<zmq::Socket> {
-        let socket = self.context.socket(zmq::SUB)?;
-        // Listen on all topics
-        socket.set_subscribe(b"")?;
+    fn create_relay_publisher_socket(&self, port: u32) -> Result<zmq::Socket> {
+        let socket = self.context.socket(zmq::PUB)?;
         socket.set_linger(0)?;
         let address = format!("tcp://*:{}", port);
-
         match socket.bind(address.as_str()) {
-            Ok(_) => debug!("Instruction Proxy bound to {}", address),
+            Ok(_) => debug!("Message Proxy bound to {}", address),
             Err(error) => {
-                error!("Failed to bind relay SUB socket to {}: {}", address, error);
+                error!("Failed to bind PUB socket to {}: {}", address, error);
                 process::exit(1);
             }
         }
@@ -98,26 +84,28 @@ impl RelayInstructionProxy {
         Ok(socket)
     }
 
-    /// Creates a ZeroMQ PUB socket for sending instructions to the engine.
+    /// Creates a ZeroMQ SUB socket for subscribing to engine messages.
     ///
     /// # Arguments
     /// * `path` - The IPC path to bind the socket to.
     ///
     /// # Returns
     /// * `Result<zmq::Socket>` - The created and bound socket or an error.
-    fn create_engine_pub_socket(&self, path: &str) -> Result<zmq::Socket> {
-        let socket = self.context.socket(zmq::PUB)?;
+    fn create_engine_subscriber_socket(&self, path: &str) -> Result<zmq::Socket> {
+        let socket = self.context.socket(zmq::SUB)?;
+        // Listen on all topics
+        socket.set_subscribe(b"")?;
         socket.set_linger(0)?;
         let address = format!("ipc://{}", path);
         if let Err(error) = socket.bind(address.as_str()) {
-            error!("Failed to bind engine PUB socket to {}: {}", address, error);
+            error!("Failed to bind engine SUB socket to {}: {}", address, error);
             process::exit(1);
         }
 
         // Make sure the socket is owned by the 'webx' user
         match System::get_user("webx") {
             Some(user) => {
-                // Change ownership of the socket to 'webx' user
+                // Change ownership of the IPC socket to 'webx' user
                 fs::chown(path, user.uid.as_raw(), user.gid.as_raw())?;
 
                 // Make sure socket is accessible only to current user
@@ -153,36 +141,25 @@ impl RelayInstructionProxy {
         }
     }
 
-    /// Forwards relay instructions to the engines and extracts session ID (to update usage times for the session).
+    /// Forwards messages from engines to the relay.
     ///
     /// # Arguments
-    /// * `relay_sub_socket` - The ZeroMQ socket receiving relay instructions.
-    /// * `engine_pub_socket` - The ZeroMQ socket publishing instructions to the engine.
-    ///
-    /// # Returns
-    /// * `Option<String>` - The session ID if available.
-    fn forward_relay_instruction(&self, relay_sub_socket: &zmq::Socket, engine_pub_socket: &zmq::Socket) -> Option<String> {
+    /// * `engine_subscriber_socket` - The ZeroMQ socket receiving engine messages.
+    /// * `relay_publisher_socket` - The ZeroMQ socket publishing messages to the relay.
+    fn forward_engine_message(&self, engine_subscriber_socket: &zmq::Socket, relay_publisher_socket: &zmq::Socket) {
         let mut msg = zmq::Message::new();
-        let mut session_id_option = None;
 
-        // Get message from relay publisher
-        if let Err(error) = relay_sub_socket.recv(&mut msg, 0) {
-            error!("Failed to received instruction from relay publisher: {}", error);
+        // Get message on subscriber socket
+        if let Err(error) = engine_subscriber_socket.recv(&mut msg, 0) {
+            error!("Failed to received message from engine message publisher: {}", error);
 
         } else {
-            trace!("Got instruction from relay of length {}", msg.len());
-
-            // Get session_id from the msg
-            let raw_session_id = msg.deref();
-            let session_id = hex::encode(&raw_session_id[0 .. 16]);
-            session_id_option = Some(session_id);
-
-            // Resend message on engine pub socket
-            if let Err(error) = engine_pub_socket.send(msg, 0) {
-                error!("Failed to send instruction to engine subscribers: {}", error);
+            trace!("Got message from engine of length {}", msg.len());
+            // Resend message on publisher socket
+            if let Err(error) = relay_publisher_socket.send(msg, 0) {
+                error!("Failed to send message to relay message subscriber: {}", error);
             }   
         }
-
-        session_id_option
     }
+
 }

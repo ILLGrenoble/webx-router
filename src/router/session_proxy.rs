@@ -9,7 +9,6 @@ use std::process;
 use std::vec::Vec;
 use std::collections::HashMap;
 use uuid::Uuid;
-use nix::unistd::User;
 
 use base64::engine::{general_purpose::STANDARD, Engine};
 
@@ -28,10 +27,10 @@ impl SessionProxy {
     ///
     /// # Arguments
     /// * `context` - The ZeroMQ context.
-    pub fn new(context: zmq::Context, settings: &SesManSettings, webx_user: User) -> Self {
+    pub fn new(context: zmq::Context, settings: &SesManSettings) -> Self {
         Self {
             context,
-            service: EngineSessionService::new(settings, webx_user),
+            service: EngineSessionService::new(settings),
             is_running: false,
         }
     }
@@ -195,6 +194,7 @@ impl SessionProxy {
                     // Request session from WebX Session Manager
                     let message = self.get_or_create_session(settings, Credentials::new(username, password), ScreenResolution::new(width, height), &keyboard, &engine_parameters);
 
+                    // Debug output of all X11 sessions
                     let all_x11_sessions = self.service.get_all_x11_sessions().map(|sessions| {
                         sessions.iter().map(|session| 
                             format!("id={},width={},height={},username={},uid={}", 

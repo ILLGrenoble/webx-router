@@ -70,7 +70,7 @@ fn main() {
     }
 
     // Start the application.
-    if let Err(error) = Application::new().run(&mut settings, webx_user) {
+    if let Err(error) = Application::new().run(&mut settings) {
         error!("{}", error);
         process::exit(1);
     }

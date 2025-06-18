@@ -1,12 +1,11 @@
 use crate::{
     authentication::{Authenticator, Credentials},
-    common::{RouterError, Result, EngineSessionContainer, SesManSettings, Settings, EngineSession, Engine, to_snake_case},
+    common::{RouterError, Result, EngineSessionContainer, SesManSettings, Settings, EngineSession, Engine, to_snake_case, System},
     service::{EngineConnector},
     sesman::{X11Session, ScreenResolution, X11SessionManager, XorgService}
 };
 
 use uuid::Uuid;
-use nix::unistd::User;
 use std::process::{Command, Stdio};
 use std::os::unix::{
     io::{FromRawFd, IntoRawFd},
@@ -20,12 +19,11 @@ use std::fs::OpenOptions;
 pub struct EngineSessionService {
     session_container: EngineSessionContainer,
     x11_session_manager: X11SessionManager,
-    webx_user: User,
 }
 
 impl EngineSessionService {
     /// Creates a new `SessionService` instance.
-    pub fn new(settings: &SesManSettings, webx_user: User) -> Self {
+    pub fn new(settings: &SesManSettings) -> Self {
         let session_container = EngineSessionContainer::new();
         let authenticator = Authenticator::new(settings.authentication.service.to_owned());
         let xorg_service = XorgService::new(settings.xorg.to_owned());
@@ -33,7 +31,6 @@ impl EngineSessionService {
         Self {
             session_container,
             x11_session_manager,
-            webx_user,
         }
     }
 
@@ -228,6 +225,9 @@ impl EngineSessionService {
         // Get engine connector IPC path
         let session_connector_path = format!("{}.{}.ipc", engine_connector_root_path, x11_session.id());
 
+        let webx_user = System::get_user("webx")
+            .ok_or_else(|| RouterError::EngineSessionError("Failed to retrieve 'webx' user".to_string()))?;
+
         let mut command = Command::new(engine_path);
         command
             .arg("-k")
@@ -241,8 +241,8 @@ impl EngineSessionService {
             .env("WEBX_ENGINE_IPC_MESSAGE_PROXY_PATH", message_proxy_path)
             .env("WEBX_ENGINE_IPC_INSTRUCTION_PROXY_PATH", instruction_proxy_path)
             .env("WEBX_ENGINE_SESSION_ID", x11_session.id().simple().to_string())
-            .uid(self.webx_user.uid.as_raw())
-            .gid(self.webx_user.gid.as_raw());
+            .uid(webx_user.uid.as_raw())
+            .gid(webx_user.gid.as_raw());
 
         debug!("Launching WebX Engine \"{}\" on display {}", engine_path, x11_session.display_id());
 

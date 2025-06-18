@@ -1,8 +1,7 @@
-use crate::router::{EngineMessageProxy, RelayInstructionProxy, ClientConnector, SessionProxy};
+use crate::router::{MessageProxy, InstructionProxy, ClientConnector, SessionProxy};
 use crate::common::*;
 
 use std::thread;
-use nix::unistd::User;
 
 /// Manages the transport layer of the WebX Router, including proxies and connectors.
 pub struct Transport {
@@ -27,7 +26,7 @@ impl Transport {
     ///
     /// # Returns
     /// * `Result<()>` - Indicates success or failure of the operation.
-    pub fn run(&self, settings: &mut Settings, webx_user: User) -> Result<()> {
+    pub fn run(&self, settings: &mut Settings) -> Result<()> {
         let transport = &mut settings.transport;
 
         // Check for public/private keys in settings
@@ -48,7 +47,7 @@ impl Transport {
         let relay_instruction_proxy_thread = self.create_relay_instruction_proxy_thread(self.context.clone(), settings);
 
         // Create and run the session proxy in separate thread
-        let session_proxy_thread = self.create_session_proxy_thread(self.context.clone(), settings, webx_user);
+        let session_proxy_thread = self.create_session_proxy_thread(self.context.clone(), settings);
 
         // Create and run the Client Connector in the current thread (blocking)
         if let Err(error) = ClientConnector::new(self.context.clone()).run(settings) {
@@ -79,8 +78,8 @@ impl Transport {
         thread::spawn({
             let settings = settings.clone();
             move || {
-            if let Err(error) = EngineMessageProxy::new(context).run(&settings) {
-                error!("Engine Message Proxy thread error: {}", error);
+            if let Err(error) = MessageProxy::new(context).run(&settings) {
+                error!("Message Proxy thread error: {}", error);
             }
         }})
     }
@@ -97,8 +96,8 @@ impl Transport {
         thread::spawn({
             let settings = settings.clone();
             move || {
-            if let Err(error) = RelayInstructionProxy::new(context).run(&settings) {
-                error!("Relay Instruction Proxy thread error: {}", error);
+            if let Err(error) = InstructionProxy::new(context).run(&settings) {
+                error!("Instruction Proxy thread error: {}", error);
             }
         }})
     }
@@ -111,11 +110,11 @@ impl Transport {
     ///
     /// # Returns
     /// * `thread::JoinHandle<()>` - Handle to the spawned thread.
-    fn create_session_proxy_thread(&self, context: zmq::Context, settings: &Settings, webx_user: User) -> thread::JoinHandle<()> {
+    fn create_session_proxy_thread(&self, context: zmq::Context, settings: &Settings) -> thread::JoinHandle<()> {
         thread::spawn({
             let settings = settings.clone();
             move || {
-            if let Err(error) = SessionProxy::new(context, &settings.sesman, webx_user).run(&settings) {
+            if let Err(error) = SessionProxy::new(context, &settings.sesman).run(&settings) {
                 error!("Session Proxy thread error: {}", error);
             }
         }})
