@@ -2,7 +2,7 @@ use nix::unistd::User;
 
 use crate::{
     authentication::{Authenticator, Credentials},
-    common::{RouterError, Result},
+    common::{RouterError, Result, SesManSettings},
 };
 
 use super::{XorgService, Account, X11Session, ScreenResolution};
@@ -17,18 +17,12 @@ pub struct X11SessionManager {
 impl X11SessionManager {
     /// Creates a new `X11SessionManager` instance.
     ///
-    /// # Arguments
-    /// * `authenticator` - The authenticator for user authentication.
-    /// * `xorg_service` - The Xorg service for managing Xorg sessions.
-    ///
     /// # Returns
     /// A new `X11SessionManager` instance.
-    pub fn new(authenticator: Authenticator, 
-               xorg_service: XorgService
-    ) -> Self {
+    pub fn new(settings: &SesManSettings) -> Self {
         Self {
-            authenticator,
-            xorg_service,
+            authenticator: Authenticator::new(settings.authentication.service.to_owned()),
+            xorg_service: XorgService::new(settings.xorg.to_owned()),
         }
     }
 
