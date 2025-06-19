@@ -1,6 +1,6 @@
 use crate::common::*;
 use crate::authentication::Credentials;
-use crate::service::EngineSessionService;
+use crate::service::EngineSessionManager;
 use crate::sesman::ScreenResolution;
 
 use std::str;
@@ -16,7 +16,7 @@ use base64::engine::{general_purpose::STANDARD, Engine};
 /// It runs in a separate thread listening to requests from the WebX Relay.
 pub struct SessionProxy {
     context: zmq::Context,
-    service: EngineSessionService,
+    engine_session_manager: EngineSessionManager,
     is_running: bool,
 }
 
@@ -28,7 +28,7 @@ impl SessionProxy {
     pub fn new(context: zmq::Context, settings: &SesManSettings) -> Self {
         Self {
             context,
-            service: EngineSessionService::new(settings),
+            engine_session_manager: EngineSessionManager::new(settings),
             is_running: false,
         }
     }
@@ -67,7 +67,7 @@ impl SessionProxy {
                 }
 
                 // Cleanup inactive sessions
-                self.service.cleanup_inactive_engine_sessions(settings);
+                self.engine_session_manager.cleanup_inactive_engine_sessions(settings);
             }
         }
 
@@ -121,13 +121,13 @@ impl SessionProxy {
                 self.is_running = false;
 
                 // Close all sessions gracefully
-                self.service.shutdown();
+                self.engine_session_manager.shutdown();
 
             } else if event.starts_with(INPROC_SESSION_TOPIC) {
                 let message_text = msg.as_str().unwrap();
                 let message_parts = message_text.split(':').collect::<Vec<&str>>();
                 let session_id = message_parts[1];
-                self.service.update_engine_session_activity(&session_id);
+                self.engine_session_manager.update_engine_session_activity(&session_id);
 
             } else {
                 warn!("Got unknown event bus command: {}", event);
@@ -185,7 +185,7 @@ impl SessionProxy {
                     let message = self.get_or_create_session(settings, Credentials::new(username, password), ScreenResolution::new(width, height), &keyboard, &engine_parameters);
 
                     // Debug output of all X11 sessions
-                    let all_x11_sessions = self.service.get_all_x11_sessions().map(|sessions| {
+                    let all_x11_sessions = self.engine_session_manager.get_all_x11_sessions().map(|sessions| {
                         sessions.iter().map(|session| 
                             format!("id={},width={},height={},username={},uid={}", 
                                 session.id(),
@@ -224,7 +224,7 @@ impl SessionProxy {
                 info!("Got connect for session {}", session_id);
 
                 // Forward the connection request
-                match self.service.send_engine_request(&session_id, &self.context, &message_text) {
+                match self.engine_session_manager.send_engine_request(&session_id, &self.context, &message_text) {
                     Ok(response) => {
                         if let Err(error) = secure_rep_socket.send(response.as_str(), 0) {
                             error!("Failed to send client connection response: {}", error);
@@ -249,7 +249,7 @@ impl SessionProxy {
                 info!("Got disconnect from client {} for session {}", client_id, session_id);
 
                 // Forward the disconnection request
-                match self.service.send_engine_request(&session_id, &self.context, &message_text) {
+                match self.engine_session_manager.send_engine_request(&session_id, &self.context, &message_text) {
                     Ok(response) => {
                         if let Err(error) = secure_rep_socket.send(response.as_str(), 0) {
                             error!("Failed to send client disconnection response: {}", error);
@@ -288,7 +288,7 @@ impl SessionProxy {
     /// # Returns
     /// A string containing the session ID or an error message.
     fn get_or_create_session(&mut self, settings: &Settings, credentials: Credentials, resolution: ScreenResolution, keyboard: &str, engine_parameters: &HashMap<String, String>) -> String {
-        match self.service.get_or_create_engine_session(settings, &credentials, resolution, keyboard, engine_parameters, &self.context) {
+        match self.engine_session_manager.get_or_create_engine_session(settings, &credentials, resolution, keyboard, engine_parameters, &self.context) {
             Ok(session) => format!("0,{}", session.id()),
             Err(error) => {
                 error!("Failed to create session for user {}: {}", credentials.username(), error);
@@ -305,7 +305,7 @@ impl SessionProxy {
     /// # Returns
     /// A string indicating the ping result.
     fn ping_engine(&mut self, session_id: &str) -> String {
-        match self.service.ping_engine(session_id, &self.context) {
+        match self.engine_session_manager.ping_engine(session_id, &self.context) {
             Ok(_) => format!("pong,{}", session_id),
             Err(error) => {
                 error!("Failed to ping session with id {}: {}", session_id, error);

@@ -6,15 +6,15 @@ use crate::{
 use std::collections::HashMap;
 use super::EngineService;
 
-/// The `EngineSessionService` manages user WebX sessions, including creating, stopping,
+/// The `EngineSessionManager` manages user WebX sessions, including creating, stopping,
 /// and validating sessions. It interacts with the WebX Session Manager and the WebX Engine.
-pub struct EngineSessionService {
+pub struct EngineSessionManager {
     session_container: EngineSessionContainer,
     x11_session_manager: X11SessionManager,
     engine_service: EngineService,
 }
 
-impl EngineSessionService {
+impl EngineSessionManager {
     /// Creates a new `SessionService` instance.
     pub fn new(settings: &SesManSettings) -> Self {
         Self {
