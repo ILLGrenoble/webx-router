@@ -1,7 +1,8 @@
 use std::fs;
 
-use crate::common::{Engine, System};
-use crate::sesman::{X11Session};
+use super::Engine;
+use crate::common::System;
+use crate::sesman::X11Session;
 
 use signal_child::Signalable;
 

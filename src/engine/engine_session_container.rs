@@ -1,4 +1,4 @@
-use crate::common::{EngineSession};
+use super::EngineSession;
 use crate::sesman::{X11Session};
 
 /// The `EngineSessionContainer` struct manages a collection of active sessions.

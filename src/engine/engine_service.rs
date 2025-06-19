@@ -1,8 +1,9 @@
 use crate::{
-    common::{RouterError, Result, Settings, Engine, to_snake_case, System},
-    service::{EngineConnector},
+    common::{RouterError, Result, Settings, to_snake_case, System},
     sesman::{X11Session}
 };
+
+use super::{Engine, EngineConnector};
 
 use std::process::{Command, Stdio};
 use std::os::unix::{

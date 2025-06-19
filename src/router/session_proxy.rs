@@ -1,6 +1,6 @@
 use crate::common::*;
 use crate::authentication::Credentials;
-use crate::service::EngineSessionManager;
+use crate::engine::EngineSessionManager;
 use crate::sesman::ScreenResolution;
 
 use std::str;

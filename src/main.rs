@@ -16,7 +16,7 @@ mod authentication;
 mod sesman;
 mod fs;
 mod common;
-mod service;
+mod engine;
 mod router;
 
 /// Command-line options for the WebX Router application.

@@ -1,10 +1,10 @@
 use crate::{
     authentication::{Credentials},
-    common::{RouterError, Result, EngineSessionContainer, SesManSettings, Settings, EngineSession},
+    common::{RouterError, Result, SesManSettings, Settings},
     sesman::{X11Session, ScreenResolution, X11SessionManager}
 };
 use std::collections::HashMap;
-use super::EngineService;
+use super::{EngineService, EngineSessionContainer, EngineSession};
 
 /// The `EngineSessionManager` manages user WebX sessions, including creating, stopping,
 /// and validating sessions. It interacts with the WebX Session Manager and the WebX Engine.

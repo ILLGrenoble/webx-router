@@ -2,17 +2,11 @@ pub use event_bus::{EventBus, APPLICATION_SHUTDOWN_COMMAND, INPROC_APP_TOPIC, IN
 pub use error::{RouterError, Result};
 pub use settings::{Settings, TransportSettings, SesManSettings, XorgSettings};
 pub use system::System;
-pub use engine_session::EngineSession;
-pub use engine_session_container::EngineSessionContainer;
-pub use engine::Engine;
 
 mod event_bus;
 mod error;
 mod settings;
 mod system;
-mod engine_session;
-mod engine_session_container;
-mod engine;
 
 
 /// Converts a camelCase string to snake_case
