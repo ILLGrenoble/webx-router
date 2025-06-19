@@ -3,7 +3,7 @@ use crate::{
     sesman::{X11Session}
 };
 
-use super::{Engine, EngineConnector};
+use super::{Engine};
 
 use std::process::{Command, Stdio};
 use std::os::unix::{
@@ -32,9 +32,8 @@ impl EngineService {
     ///
     /// # Returns
     /// The response from the session.
-    pub fn send_engine_request(&mut self, engine: &Engine, context: &zmq::Context, request: &str) -> Result<String> {
-        let engine_connector = EngineConnector::new(context.clone());
-        engine_connector.send_request(&engine.ipc(), request)
+    pub fn send_engine_request(&mut self, engine: &mut Engine, request: &str) -> Result<String> {
+        engine.send_request(request)
     }
 
     /// Spawns a new WebX Engine process for a session.
@@ -46,7 +45,7 @@ impl EngineService {
     ///
     /// # Returns
     /// The spawned WebX Engine instance.
-    pub fn spawn_engine(&self, x11_session: &X11Session, settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>) -> Result<Engine> {
+    pub fn spawn_engine(&self, x11_session: &X11Session, context: &zmq::Context,  settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>) -> Result<Engine> {
         let engine_path = &settings.engine.path;
         let engine_log_path = &settings.engine.log_path;
         let message_proxy_path = &settings.transport.ipc.message_proxy;
@@ -92,7 +91,7 @@ impl EngineService {
 
         match command.spawn() {
             Err(error) => Err(RouterError::EngineSessionError(format!("Failed to spawn WebX Engine: {}", error))),
-            Ok(child) => Ok(Engine::new(child, session_connector_path))
+            Ok(child) => Ok(Engine::new(child, context.clone(), session_connector_path))
         }
     }
 
@@ -105,19 +104,18 @@ impl EngineService {
     ///
     /// # Returns
     /// A result indicating success or failure.
-    pub fn validate_engine(&self, engine: &Engine, context: &zmq::Context, mut tries: i32) -> Result<()> {
+    pub fn validate_engine(&self, engine: &mut Engine, id: &str, mut tries: i32) -> Result<()> {
         // Verify session is running
-        let engine_connector = EngineConnector::new(context.clone());
         let mut connection_error = "".to_string();
         while tries > 0 {
-            match engine_connector.send_request(&engine.ipc(), "ping") {
+            match engine.send_request("ping") {
                 Ok(message) => {
                     if message != "pong" {
-                        error!("Received non-pong response from WebX Engine on {}: {}", &engine.ipc(), message);
-                        return Err(RouterError::EngineSessionError("Received non-pong message".to_string()));
+                        error!("Received non-pong response from WebX Engine with session id {}: {}", id, message);
+                        return Err(RouterError::EngineSessionError(format!("Received non-pong message from ping: {}", message)));
                     }
             
-                    trace!("Received pong response from WebX Engine on {}", &engine.ipc());
+                    trace!("Received pong response from WebX Engine with session id {}", id);
                     return Ok(());
                 },
                 Err(error) => {

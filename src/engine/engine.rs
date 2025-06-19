@@ -1,11 +1,15 @@
+use crate::common::{Result, RouterError};
+use super::EngineCommunicator;
+
 use std::process::Child;
+use signal_child::Signalable;
+use std::fs;
 
 /// Represents an WebX Engine process and its inter-process communication (IPC) channel.
 pub struct Engine {
     /// The child process running the WebX Engine.
     process: Child,
-    /// The IPC channel identifier for communication.
-    ipc: String,
+    communicator: EngineCommunicator,
 }
 
 impl Engine {
@@ -19,28 +23,46 @@ impl Engine {
     /// # Returns
     ///
     /// A new instance of `Engine`.
-    pub fn new(process: Child, ipc: String) -> Self {
+    pub fn new(process: Child, context: zmq::Context, ipc: String) -> Self {
         Self {
             process,
-            ipc,
+            communicator: EngineCommunicator::new(context, ipc),
         }
     }
 
-    /// Provides mutable access to the managed child process (and the running WebX Engine).
+    /// Sends a request to a WebX Engine and retrieves the response.
+    ///
+    /// # Arguments
+    /// * `session_id` - The ID of the session.
+    /// * `context` - The ZeroMQ context.
+    /// * `request` - The request string to send.
     ///
     /// # Returns
-    ///
-    /// A mutable reference to the child process.
-    pub fn process(&mut self) -> &mut Child {
-        return &mut self.process;
+    /// The response from the session.
+    pub fn send_request(&mut self, request: &str) -> Result<String> {
+        self.communicator.send_request(request)
     }
 
-    /// Retrieves the IPC channel identifier.
-    ///
-    /// # Returns
-    ///
-    /// A string slice representing the IPC channel identifier.
-    pub fn ipc(&self) -> &str {
-        return &self.ipc;
+    pub fn close(&mut self) -> Result<()> {
+        // Close the IPC channel
+        self.communicator.close();
+        
+        match self.process.interrupt() {
+            Ok(_) => {
+                if let Err(error) = self.process.wait() {
+                    return Err(RouterError::SystemError(format!("Failed to wait for WebX Engine process to terminate: {}", error)));
+
+                } else {
+                    // Delete the IPC socket file
+                    let _ = fs::remove_file(self.communicator.path());
+                }
+            },
+            Err(error) => {
+                return Err(RouterError::SystemError(format!("Failed to interrupt WebX Engine process with pid {}: {}", self.process.id(), error)));
+            }
+        }
+        
+        Ok(())
     }
+
 }

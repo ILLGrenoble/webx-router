@@ -34,17 +34,6 @@ impl EngineSessionContainer {
         self.sessions.iter().find(|session| session.username() == username)
     }
 
-    /// Retrieves a session by session ID.
-    ///
-    /// # Arguments
-    /// * `session_id` - The ID of the session.
-    ///
-    /// # Returns
-    /// An optional reference to the session.
-    pub fn get_engine_session_by_session_id(&self, session_id: &str) -> Option<&EngineSession> {
-        self.sessions.iter().find(|session| session.id() == session_id)
-    }
-
     /// Retrieves a mutable reference to a session by session ID.
     ///
     /// # Arguments

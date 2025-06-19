@@ -224,7 +224,7 @@ impl SessionProxy {
                 info!("Got connect for session {}", session_id);
 
                 // Forward the connection request
-                match self.engine_session_manager.send_engine_request(&session_id, &self.context, &message_text) {
+                match self.engine_session_manager.send_engine_request(&session_id, &message_text) {
                     Ok(response) => {
                         if let Err(error) = secure_rep_socket.send(response.as_str(), 0) {
                             error!("Failed to send client connection response: {}", error);
@@ -249,7 +249,7 @@ impl SessionProxy {
                 info!("Got disconnect from client {} for session {}", client_id, session_id);
 
                 // Forward the disconnection request
-                match self.engine_session_manager.send_engine_request(&session_id, &self.context, &message_text) {
+                match self.engine_session_manager.send_engine_request(&session_id, &message_text) {
                     Ok(response) => {
                         if let Err(error) = secure_rep_socket.send(response.as_str(), 0) {
                             error!("Failed to send client disconnection response: {}", error);
@@ -305,7 +305,7 @@ impl SessionProxy {
     /// # Returns
     /// A string indicating the ping result.
     fn ping_engine(&mut self, session_id: &str) -> String {
-        match self.engine_session_manager.ping_engine(session_id, &self.context) {
+        match self.engine_session_manager.ping_engine(session_id) {
             Ok(_) => format!("pong,{}", session_id),
             Err(error) => {
                 error!("Failed to ping session with id {}: {}", session_id, error);

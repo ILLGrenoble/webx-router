@@ -27,6 +27,7 @@ impl EngineSessionManager {
     /// Stops all active engines and .
     pub fn shutdown(&mut self) {
         self.session_container.stop_engines();
+        
         if let Err(error) = self.x11_session_manager.kill_all() {
            error!("Failed to kill all X11 sessions during shutdown: {}", error);
         }
@@ -83,9 +84,9 @@ impl EngineSessionManager {
     ///
     /// # Returns
     /// A result indicating success or failure.
-    pub fn ping_engine(&mut self, session_id: &str, context: &zmq::Context) -> Result<()> {
-        if let Some(session) = self.session_container.get_engine_session_by_session_id(session_id) {
-            if let Err(error) =  self.engine_service.validate_engine(session.engine(), context, 1) {
+    pub fn ping_engine(&mut self, session_id: &str) -> Result<()> {
+        if let Some(session) = self.session_container.get_mut_engine_session_by_session_id(session_id) {
+            if let Err(error) =  self.engine_service.validate_engine(session.engine_mut(), session_id, 1) {
                 // Delete session
                 self.session_container.remove_engine_session_with_id(session_id);
                 return Err(error);
@@ -108,9 +109,9 @@ impl EngineSessionManager {
     ///
     /// # Returns
     /// The response from the session.
-    pub fn send_engine_request(&mut self, session_id: &str, context: &zmq::Context, request: &str) -> Result<String> {
-        if let Some(session) = self.session_container.get_engine_session_by_session_id(session_id) {
-            self.engine_service.send_engine_request(session.engine(), context, request)
+    pub fn send_engine_request(&mut self, session_id: &str, request: &str) -> Result<String> {
+        if let Some(session) = self.session_container.get_mut_engine_session_by_session_id(session_id) {
+            self.engine_service.send_engine_request(session.engine_mut(), request)
         
         } else {
             Err(RouterError::EngineSessionError(format!("Could not retrieve Session with ID \"{}\"", session_id)))
@@ -163,12 +164,13 @@ impl EngineSessionManager {
         debug!("Creating session for user \"{}\" on display {}", &x11_session.account().username(), &x11_session.display_id());
 
         // Spawn a new WebX Engine
-        let engine = self.engine_service.spawn_engine(&x11_session, settings, keyboard, engine_parameters)?;
+        let engine = self.engine_service.spawn_engine(&x11_session, context, settings, keyboard, engine_parameters)?;
 
         let mut session = EngineSession::new(x11_session, engine);
+        let session_id = session.id().to_string();
 
         // Validate that the engine is running
-        if let Err(error) = self.engine_service.validate_engine(session.engine(), context, 3) {
+        if let Err(error) = self.engine_service.validate_engine(session.engine_mut(), &session_id, 3) {
             // Make sure the engine process has stopped
             session.stop_engine();
             return Err(RouterError::EngineSessionError(format!("Failed to validate that WebX Engine is running for user {}: {}", session.username(), error)));

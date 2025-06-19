@@ -1,10 +1,6 @@
-use std::fs;
-
 use super::Engine;
 use crate::common::System;
 use crate::sesman::X11Session;
-
-use signal_child::Signalable;
 
 /// The `EngineSession` struct represents a user session, including its X11 session and WebX Engine.
 pub struct EngineSession {
@@ -61,30 +57,18 @@ impl EngineSession {
         return &self.x11_session.account().username();
     }
 
-    /// Retrieves the WebX Engine instance associated with the session.
-    pub fn engine(&self) -> &Engine {
-        return &self.engine;
+    /// Retrieves the mutable WebX Engine instance associated with the session.
+    pub fn engine_mut(&mut self) -> &mut Engine {
+        return &mut self.engine;
     }
 
     /// Stops the session and cleans up resources.
     pub fn stop_engine(&mut self) {
-        let ipc_path = self.engine.ipc().to_string();
-
-        let process = self.engine.process();
-        let process_id = { process.id() };
-        match process.interrupt() {
+        match self.engine.close() {
             Ok(_) => {
-                if let Err(error) = process.wait() {
-                    warn!("Failed to wait for WebX Engine for {} running on PID {} to terminate: {}", self.username(), process_id, error);
-
-                } else {
-                    debug!("Shutdown WebX Engine for {} on display {}", self.username(), self.display_id());
-
-                    // Delete the IPC socket file
-                    let _ = fs::remove_file(ipc_path);
-                }
+                debug!("Shutdown WebX Engine for {} on display {} with id {}", self.username(), self.display_id(), self.id());
             },
-            Err(error) => error!("Failed to interrupt WebX Engine for {} running on PID {}: {}", self.username(), process_id, error),
+            Err(error) => error!("Failed to interrupt WebX Engine for {}: {}", self.username(), error),
         }
 
     }
