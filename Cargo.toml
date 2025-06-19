@@ -42,7 +42,7 @@ systemd-units = {}
 conf-files = ["/etc/webx/webx-router-config.yml", "/etc/webx/startwm.sh"]
 assets = [
     ["target/release/webx-router", "usr/bin/", "755"],
-    ["config.yml", "/etc/webx/webx-router-config.yml", "644"],
+    ["config.example.yml", "/etc/webx/webx-router-config.yml", "644"],
     ["bin/pam-webx", "/etc/pam.d/webx", "644"],
     ["bin/startwm.sh", "/etc/webx/startwm.sh", "755"],
 ]
