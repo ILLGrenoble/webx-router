@@ -47,6 +47,7 @@ impl Engine {
         // Close the IPC channel
         self.communicator.close();
         
+        debug!("Killing WebX Engine with pid: {}", self.process.id());
         match self.process.interrupt() {
             Ok(_) => {
                 if let Err(error) = self.process.wait() {
@@ -58,7 +59,7 @@ impl Engine {
                 }
             },
             Err(error) => {
-                return Err(RouterError::SystemError(format!("Failed to interrupt WebX Engine process with pid {}: {}", self.process.id(), error)));
+                return Err(RouterError::SystemError(format!("Interrupt of pid {} failed: {}", self.process.id(), error)));
             }
         }
         

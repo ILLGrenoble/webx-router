@@ -37,9 +37,8 @@ impl X11SessionManager {
     pub fn create_session(&self, credentials: &Credentials, resolution: ScreenResolution) -> Result<X11Session> {
         return match self.authenticator.authenticate(credentials) {
             Ok(environment) => {
-                debug!("Successfully authenticated user: {}", &credentials.username());
+                debug!("Successfully authenticated user: \"{}\"", &credentials.username());
                 if let Ok(Some(user)) = User::from_name(credentials.username()) {
-                    debug!("Found user: {}", &credentials.username());
                     if let Some(account) = Account::from_user(user) {
 
                         // if the user already has an x session running then exit early...
@@ -57,12 +56,12 @@ impl X11SessionManager {
                         // finally, let's launch the x server...
                         return self.xorg_service.execute(&account, &webx_user, resolution, environment);
                     }
-                    return Err(RouterError::X11SessionError(format!("User {} is invalid. check they have a home directory?", credentials.username())));
+                    return Err(RouterError::X11SessionError(format!("User \"{}\" is invalid. check they have a home directory?", credentials.username())));
                 }
-                Err(RouterError::X11SessionError(format!("Could not find user {}", credentials.username())))
+                Err(RouterError::X11SessionError(format!("Could not find user \"{}\"", credentials.username())))
             }
             Err(error) => {
-                Err(RouterError::X11SessionError(format!("Error authenticating user {}", error)))
+                Err(RouterError::X11SessionError(format!("Error authenticating user \"{}\"", error)))
             }
         }
     }

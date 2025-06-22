@@ -221,7 +221,7 @@ impl SessionProxy {
 
             } else {
                 let session_id = message_parts[1];
-                info!("Got connect for session {}", session_id);
+                info!("Got connect for session \"{}\"", session_id);
 
                 // Forward the connection request
                 match self.engine_session_manager.send_engine_request(&session_id, &message_text) {
@@ -246,7 +246,7 @@ impl SessionProxy {
             } else {
                 let session_id = message_parts[1];
                 let client_id = message_parts[2];
-                info!("Got disconnect from client {} for session {}", client_id, session_id);
+                info!("Got disconnect from client \"{}\" for session \"{}\"", client_id, session_id);
 
                 // Forward the disconnection request
                 match self.engine_session_manager.send_engine_request(&session_id, &message_text) {
@@ -289,7 +289,7 @@ impl SessionProxy {
     /// A string containing the session ID or an error message.
     fn get_or_create_session(&mut self, settings: &Settings, credentials: Credentials, resolution: ScreenResolution, keyboard: &str, engine_parameters: &HashMap<String, String>) -> String {
         match self.engine_session_manager.get_or_create_engine_session(settings, &credentials, resolution, keyboard, engine_parameters, &self.context) {
-            Ok(session) => format!("0,{}", session.id()),
+            Ok(session_id) => format!("0,{}", session_id),
             Err(error) => {
                 error!("Failed to create session for user {}: {}", credentials.username(), error);
                 format!("1,{}", error)

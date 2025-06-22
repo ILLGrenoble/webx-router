@@ -64,11 +64,12 @@ impl EngineSession {
 
     /// Stops the session and cleans up resources.
     pub fn stop_engine(&mut self) {
+        debug!("Stopping WebX Engine for \"{}\" on display \"{}\" with id \"{}\"", self.username(), self.display_id(), self.id());
         match self.engine.close() {
             Ok(_) => {
-                debug!("Shutdown WebX Engine for {} on display {} with id {}", self.username(), self.display_id(), self.id());
+                debug!("Stopped WebX Engine for \"{}\" on display \"{}\" with id \"{}\"", self.username(), self.display_id(), self.id());
             },
-            Err(error) => error!("Failed to interrupt WebX Engine for {}: {}", self.username(), error),
+            Err(error) => error!("Failed to stop WebX Engine for \"{}\": {}", self.username(), error),
         }
 
     }

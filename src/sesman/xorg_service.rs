@@ -385,17 +385,9 @@ impl XorgService {
         let window_manager = self.spawn_window_manager(&session_id, display_id, account, &environment)?;
 
         info!(
-            "Running xorg display {} on process id {} with window manager process id {}",
-            display_id,
-            xorg.pid(),
-            window_manager.pid()
-        );
+            "Started Xorg on display \"{}\" with process id {} and window manager process id {}", display_id, xorg.pid(), window_manager.pid());
 
-        let authority_file_path = format!(
-            "{}/{}/Xauthority",
-            self.settings.sessions_path,
-            account.uid()
-        );
+        let authority_file_path = format!("{}/{}/Xauthority", self.settings.sessions_path, account.uid());
 
         let session = X11Session::new(
             session_id,

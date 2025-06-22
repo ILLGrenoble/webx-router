@@ -3,30 +3,39 @@ use crate::{
     common::{RouterError, Result, SesManSettings, Settings},
     sesman::{X11Session, ScreenResolution, X11SessionManager}
 };
+use super::{EngineService, EngineSession};
 use std::collections::HashMap;
-use super::{EngineService, EngineSessionContainer, EngineSession};
+use std::sync::Mutex;
 
 /// The `EngineSessionManager` manages user WebX sessions, including creating, stopping,
 /// and validating sessions. It interacts with the WebX Session Manager and the WebX Engine.
 pub struct EngineSessionManager {
-    session_container: EngineSessionContainer,
     x11_session_manager: X11SessionManager,
     engine_service: EngineService,
+    sessions: Mutex<Vec<EngineSession>>,
 }
 
 impl EngineSessionManager {
     /// Creates a new `SessionService` instance.
     pub fn new(settings: &SesManSettings) -> Self {
         Self {
-            session_container: EngineSessionContainer::new(),
             x11_session_manager: X11SessionManager::new(settings),
             engine_service: EngineService::new(),
+            sessions: Mutex::new(Vec::new()),
         }
     }
 
     /// Stops all active engines and .
     pub fn shutdown(&mut self) {
-        self.session_container.stop_engines();
+        if let Ok(mut sessions) = self.sessions.lock() {
+            for session in sessions.iter_mut() {
+               session.stop_engine();
+            }
+            sessions.clear();
+        
+        } else {
+           error!("Failed to obtain sessions mutex to kill all Engine Sessions during shutdown");
+        }
         
         if let Err(error) = self.x11_session_manager.kill_all() {
            error!("Failed to kill all X11 sessions during shutdown: {}", error);
@@ -49,31 +58,53 @@ impl EngineSessionManager {
     ///
     /// # Returns
     /// A reference to the created or retrieved session.
-    pub fn get_or_create_engine_session(&mut self, settings: &Settings, credentials: &Credentials, resolution: ScreenResolution, keyboard: &str, engine_parameters: &HashMap<String, String>, context: &zmq::Context) -> Result<&EngineSession> {
+    pub fn get_or_create_engine_session(&mut self, settings: &Settings, credentials: &Credentials, resolution: ScreenResolution, keyboard: &str, engine_parameters: &HashMap<String, String>, context: &zmq::Context) -> Result<String> {
         // Request display/session Id from WebX Session Manager
         match self.x11_session_manager.create_session(credentials, resolution) {
             Ok(x11_session) => {
-                debug!("Got response for session manager: user \"{}\" has display on \"{}\"", x11_session.account().username(), x11_session.display_id());
+                debug!("X11 session obtained for user \"{}\" on display \"{}\"", x11_session.account().username(), x11_session.display_id());
 
-                // See if session already exists matching x11_session attributes
-                if self.session_container.get_engine_session_by_x11_session(&x11_session).is_none() {
-                    // cleanup any other sessions for the user
-                    self.session_container.remove_engine_session_for_user(credentials.username());
+                if let Ok(mut sessions) = self.sessions.lock() {
+                    // See if session already exists matching x11_session attributes
+                    if let Some(session) = sessions.iter().find(|session| 
+                        session.username() == x11_session.account().username() && 
+                        session.id() == x11_session.id() && 
+                        session.display_id() == x11_session.display_id()) {
 
-                    // Create new session for the user
-                    self.create_engine_session(x11_session, settings, keyboard, engine_parameters, context)?;
-                } 
+                        debug!("Found existing Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", session.username(), session.display_id(), session.id());
+                        return Ok(session.id().to_string());
+                    }
 
-                // Return the session
-                return match self.session_container.get_engine_session_by_username(credentials.username()) {
-                    Some(session) => Ok(session),
-                    None => Err(RouterError::EngineSessionError(format!("Could not retrieve Session for user \"{}\"", credentials.username())))
-                };
+                    // Remove existing sessions for the user
+                    if let Some((index, session)) = sessions.iter_mut().enumerate().find(|(_, session)| session.username() == x11_session.account().username()) {
+                        debug!("Removing existing Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", session.username(), session.display_id(), session.id());
+                        // stop the engine session
+                        session.stop_engine();
+
+                        // Remove the old engine session
+                        sessions.remove(index);        
+                    }
+                } else {
+                    return Err(RouterError::EngineSessionError(format!("Failed to get session lock")));
+                }
+
+                // Create new session for the user
+                self.create_engine_session(x11_session, settings, keyboard, engine_parameters, context)?;
+
+                if let Ok(sessions) = self.sessions.lock() {
+                    // Return the newly created session
+                    match sessions.iter().find(|session| session.username() == credentials.username()) {
+                        Some(session) => Ok(session.id().to_string()),
+                        None => Err(RouterError::EngineSessionError(format!("Could not retrieve Engine Session for user \"{}\"", credentials.username())))
+                    }
+                } else {
+                    Err(RouterError::EngineSessionError(format!("failed to get session lock")))
+                }
             },
             Err(error) => {
-                return Err(RouterError::EngineSessionError(format!("Failed to create X11 session for user {}: {}", credentials.username(), error)));
+                return Err(RouterError::EngineSessionError(format!("Failed to create X11 session for user \"{}\": {}", credentials.username(), error)));
             }
-        };
+        }
     }
 
     /// Pings a WebX Engine to check if it is active.
@@ -85,19 +116,25 @@ impl EngineSessionManager {
     /// # Returns
     /// A result indicating success or failure.
     pub fn ping_engine(&mut self, session_id: &str) -> Result<()> {
-        if let Some(session) = self.session_container.get_mut_engine_session_by_session_id(session_id) {
-            if let Err(error) =  self.engine_service.validate_engine(session.engine_mut(), session_id, 1) {
-                // Delete session
-                self.session_container.remove_engine_session_with_id(session_id);
-                return Err(error);
+        if let Ok(mut sessions) = self.sessions.lock() {
+            let (index, session) = sessions.iter_mut().enumerate().find(|(_, session)| session.id() == session_id)
+                .ok_or_else(|| RouterError::EngineSessionError(format!("Could not retrieve Engine Session with id \"{}\"", session_id)))?;
+
+            match self.engine_service.validate_engine(session.engine_mut(), session_id, 1) {
+                Ok(_) => Ok(()),
+                Err(error) => {
+                    // stop the engine session (if possible)
+                    session.stop_engine();
+
+                    // Remove the old engine session
+                    sessions.remove(index);   
+
+                    Err(error)
+                }
             }
-
         } else {
-            return Err(RouterError::EngineSessionError(format!("Could not retrieve Session with ID \"{}\"", session_id)));
+            Err(RouterError::EngineSessionError(format!("Failed to get sessions lock")))
         }
-
-        // All good
-        Ok(())
     }
 
     /// Sends a request to a WebX Engine and retrieves the response.
@@ -110,11 +147,16 @@ impl EngineSessionManager {
     /// # Returns
     /// The response from the session.
     pub fn send_engine_request(&mut self, session_id: &str, request: &str) -> Result<String> {
-        if let Some(session) = self.session_container.get_mut_engine_session_by_session_id(session_id) {
-            self.engine_service.send_engine_request(session.engine_mut(), request)
+        if let Ok(mut sessions) = self.sessions.lock() {
+            if let Some(session) = sessions.iter_mut().find(|session| session.id() == session_id) {
+                self.engine_service.send_engine_request(session.engine_mut(), request)
         
+            } else {
+                Err(RouterError::EngineSessionError(format!("Could not retrieve Engine Session with id \"{}\"", session_id)))
+            }
+
         } else {
-            Err(RouterError::EngineSessionError(format!("Could not retrieve Session with ID \"{}\"", session_id)))
+            Err(RouterError::EngineSessionError(format!("Failed to get sessions lock")))
         }
     }
 
@@ -123,8 +165,10 @@ impl EngineSessionManager {
     /// # Arguments
     /// * `session_id` - The ID of the session to update.
     pub fn update_engine_session_activity(&mut self, session_id: &str) {
-        if let Some(session) = self.session_container.get_mut_engine_session_by_session_id(session_id) {
-            session.update_activity();
+        if let Ok(mut sessions) = self.sessions.lock() {
+            if let Some(session) = sessions.iter_mut().find(|session| session.id() == session_id) {
+                session.update_activity();
+            }
         }
     }
 
@@ -135,17 +179,29 @@ impl EngineSessionManager {
     /// * `context` - The ZeroMQ context.
     pub fn cleanup_inactive_engine_sessions(&mut self, settings: &Settings) {
         if settings.sesman.auto_logout_s > 0 {
-            let inactive_sessions = self.session_container.get_inactive_session_ids(settings.sesman.auto_logout_s);
-            for session in inactive_sessions.iter() {
-                info!("Removing inactive session with id {} for user {}", &session.0, &session.1);
-    
-                // Remove session
-                self.session_container.remove_engine_session_with_id(&session.0);
-    
-                // Close X11 session
-                if let Err(error) = self.x11_session_manager.kill_by_id(&session.0) {
-                   error!("Could not logout x11 session: {}", error);
+            if let Ok(mut sessions) = self.sessions.lock() {
+                let to_remove: Vec<usize> = sessions.iter_mut().enumerate()
+                    .filter(|(_, session)| !session.is_active(settings.sesman.auto_logout_s))
+                    .map(|(index, session)| {
+                        info!("Removing inactive Engine Session with id \"{}\" for user \"{}\" on display \"{}\"", session.id(), &session.username(), session.display_id());
+            
+                        // stop the engine session (if possible)
+                        session.stop_engine();
+            
+                        // Close X11 session
+                        if let Err(error) = self.x11_session_manager.kill_by_id(session.id()) {
+                            error!("Could not logout x11 session: {}", error);
+                        }
+
+                        index
+                    })
+                    .collect();
+
+                // Remove sessions in reverse order to avoid shifting indices
+                for index in to_remove.into_iter().rev() {
+                    sessions.remove(index);
                 }
+
             }
         }
     }
@@ -161,7 +217,7 @@ impl EngineSessionManager {
     /// # Returns
     /// A result indicating success or failure.
     fn create_engine_session(&mut self, x11_session: X11Session, settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>, context: &zmq::Context)  -> Result<()> {
-        debug!("Creating session for user \"{}\" on display {}", &x11_session.account().username(), &x11_session.display_id());
+        debug!("Creating Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", &x11_session.account().username(), &x11_session.display_id(), x11_session.id());
 
         // Spawn a new WebX Engine
         let engine = self.engine_service.spawn_engine(&x11_session, context, settings, keyboard, engine_parameters)?;
@@ -173,13 +229,15 @@ impl EngineSessionManager {
         if let Err(error) = self.engine_service.validate_engine(session.engine_mut(), &session_id, 3) {
             // Make sure the engine process has stopped
             session.stop_engine();
-            return Err(RouterError::EngineSessionError(format!("Failed to validate that WebX Engine is running for user {}: {}", session.username(), error)));
+            return Err(RouterError::EngineSessionError(format!("Failed to validate that WebX Engine is running for user \"{}\" with session id \"{}\": {}", session.username(), session.id(), error)));
         }
 
-        debug!("Created session {} on display {} for user \"{}\"", &session.id(), &session.display_id(), &session.username());
+        debug!("Created session with id \"{}\" on display \"{}\" for user \"{}\"", &session.id(), &session.display_id(), &session.username());
 
         // Store session
-        self.session_container.add_engine_session(session);
+        if let Ok(mut sessions) = self.sessions.lock() {
+            sessions.push(session);
+        }
 
         Ok(())
     }
