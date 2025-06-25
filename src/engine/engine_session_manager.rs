@@ -252,12 +252,13 @@ impl EngineSessionManager {
     fn multi_try_spawn_engine(&self, x11_session: &X11Session, context: &zmq::Context,  settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>, tries: u64) -> Option<Engine> {
         let mut attempt = 1;
         while attempt <= tries {
-            warn!("Starting WebX Engine for user \"{}\" with session id \"{}\" on display \"{}\" (attempt {} / {})", x11_session.account().username(), x11_session.id(), x11_session.display_id(), attempt, tries);
+            debug!("Starting WebX Engine for user \"{}\" with session id \"{}\" on display \"{}\" (attempt {} / {})", x11_session.account().username(), x11_session.id(), x11_session.display_id(), attempt, tries);
             match self.engine_service.spawn_engine(&x11_session, context, settings, keyboard, engine_parameters) {
                 Ok(engine) => {
                     thread::sleep(time::Duration::from_millis(2000));
 
                     if engine.is_running().unwrap_or(true) {
+                        debug!("WebX Engine running for user \"{}\" with session id \"{}\" on display \"{}\"", x11_session.account().username(), x11_session.id(), x11_session.display_id());
                         return Some(engine);
                     }
 
