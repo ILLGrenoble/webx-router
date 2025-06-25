@@ -30,10 +30,10 @@ impl ProcessHandle {
     /// # Returns
     /// A `Result` indicating success or an `ApplicationError` if the process could not be killed.
     pub fn kill(&self) -> Result<()> {
-        if let Err(error) = self.process.kill() {
-            error!("Could not kill process: {}", error);
+        return match self.process.kill() {
+            Ok(_) => Ok(()),
+            Err(error) => Err(RouterError::IoError(error))
         }
-        Ok(())
     }
 
     /// Returns the process ID (PID) of the process.
@@ -41,19 +41,18 @@ impl ProcessHandle {
         self.process.id()
     }
 
-    /// Checks if the process is still running.
-    ///
-    /// # Returns
-    /// A `Result` indicating success if the process has exited, or an `ApplicationError` if it is still running.
-    pub fn is_running(&self) -> Result<()> {
+    pub fn is_running(&self) -> Option<bool> {
         let terminate_result = self.process.try_wait();
         match terminate_result {
             Ok(expected_status) => match expected_status {
                 // Process already exited. Terminate was successful.
-                Some(_status) => Ok(()),
-                None => Err(RouterError::TransportError(format!("Process [pid={}] is still running.", self.process.id())))
+                Some(_status) => Some(false),
+                None => Some(true)
             },
-            Err(error) => Err(RouterError::TransportError(format!("Failed to wait for process [pid={}]. Error: {}", self.process.id(), error)))
+            Err(error) => {
+                warn!("Failed to wait for process [pid={}]. Error: {}", self.process.id(), error);
+                None
+            }
         }
     }
 }

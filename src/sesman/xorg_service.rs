@@ -9,9 +9,9 @@ use pam_client::env_list::EnvList;
 use rand::Rng;
 use uuid::Uuid;
 
-use crate::common::{Result, RouterError, XorgSettings};
+use crate::common::{Result, RouterError, XorgSettings, ProcessHandle};
 use crate::fs::{chmod, chown, mkdir, touch};
-use super::{Account, ProcessHandle, ScreenResolution, X11Session};
+use super::{Account, ScreenResolution, X11Session};
 
 /// The `XorgService` struct provides functionality for managing Xorg sessions,
 /// including creating, cleaning up, and launching Xorg servers and window managers.
@@ -80,7 +80,7 @@ impl XorgService {
         let mut cleaned_up_total = 0;
         if let Ok(mut sessions) = self.sessions.lock() {
             sessions.retain(|session| {
-                if session.xorg().is_running().is_err() {
+                if session.xorg().is_running().unwrap_or(true) {
                     true
                 } else {
                     error!("Removing session {} as the xorg server is no longer running", session.id());

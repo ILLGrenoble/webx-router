@@ -1,6 +1,7 @@
 use std::fmt;
 
-use super::{ProcessHandle, ScreenResolution, Account};
+use crate::common::{ProcessHandle};
+use super::{ScreenResolution, Account};
 
 /// The `Session` struct represents a user session managed by the WebX Session Manager.
 /// It contains details about the session, such as the user, session ID, the Xorg process and the Window Manager process.

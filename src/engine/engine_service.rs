@@ -1,17 +1,21 @@
 use crate::{
-    common::{RouterError, Result, Settings, to_snake_case, System},
+    common::{RouterError, Result, Settings, to_snake_case, System, ProcessHandle},
     sesman::{X11Session}
 };
 
 use super::{Engine};
 
-use std::process::{Command, Stdio};
-use std::os::unix::{
-    io::{FromRawFd, IntoRawFd},
-    prelude::CommandExt,
+use std::{
+    thread,
+    time,
+    fs::{OpenOptions},
+    collections::{HashMap},
+    process::{Command, Stdio},
+    os::unix::{
+        io::{FromRawFd, IntoRawFd},
+        prelude::CommandExt,
+    },
 };
-use std::collections::HashMap;
-use std::fs::OpenOptions;
 
 pub struct EngineService {
 }
@@ -89,9 +93,9 @@ impl EngineService {
 
         debug!("Spawning command: {}", format!("{:?}", command).replace("\"", ""));
 
-        match command.spawn() {
+        match ProcessHandle::new(&mut command) {
             Err(error) => Err(RouterError::EngineSessionError(format!("Failed to spawn WebX Engine: {}", error))),
-            Ok(child) => Ok(Engine::new(child, context.clone(), session_connector_path))
+            Ok(process) => Ok(Engine::new(process, x11_session.id(), context.clone(), session_connector_path))
         }
     }
 
@@ -104,23 +108,24 @@ impl EngineService {
     ///
     /// # Returns
     /// A result indicating success or failure.
-    pub fn validate_engine(&self, engine: &mut Engine, id: &str, mut tries: i32) -> Result<()> {
+    pub fn validate_engine(&self, engine: &mut Engine, mut tries: i32) -> Result<()> {
         // Verify session is running
         let mut connection_error = "".to_string();
         while tries > 0 {
             match engine.send_request("ping") {
                 Ok(message) => {
                     if message != "pong" {
-                        error!("Received non-pong response from WebX Engine with session id {}: {}", id, message);
+                        error!("Received non-pong response from WebX Engine with session id {}: {}", engine.get_session_id(), message);
                         return Err(RouterError::EngineSessionError(format!("Received non-pong message from ping: {}", message)));
                     }
             
-                    trace!("Received pong response from WebX Engine with session id {}", id);
+                    trace!("Received pong response from WebX Engine with session id {}", engine.get_session_id());
                     return Ok(());
                 },
                 Err(error) => {
                     connection_error = error.to_string();
                     tries -= 1;
+                    thread::sleep(time::Duration::from_millis(2000));
                 }
             }
         }

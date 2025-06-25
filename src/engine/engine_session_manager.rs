@@ -3,9 +3,13 @@ use crate::{
     common::{RouterError, Result, SesManSettings, Settings},
     sesman::{X11Session, ScreenResolution, X11SessionManager}
 };
-use super::{EngineService, EngineSession};
-use std::collections::HashMap;
-use std::sync::Mutex;
+use super::{EngineService, EngineSession, Engine};
+use std::{
+    thread,
+    time,
+    sync::Mutex,
+    collections::HashMap,
+};
 
 /// The `EngineSessionManager` manages user WebX sessions, including creating, stopping,
 /// and validating sessions. It interacts with the WebX Session Manager and the WebX Engine.
@@ -120,7 +124,7 @@ impl EngineSessionManager {
             let (index, session) = sessions.iter_mut().enumerate().find(|(_, session)| session.id() == session_id)
                 .ok_or_else(|| RouterError::EngineSessionError(format!("Could not retrieve Engine Session with id \"{}\"", session_id)))?;
 
-            match self.engine_service.validate_engine(session.engine_mut(), session_id, 1) {
+            match self.engine_service.validate_engine(session.engine_mut(), 1) {
                 Ok(_) => Ok(()),
                 Err(error) => {
                     // stop the engine session (if possible)
@@ -216,29 +220,57 @@ impl EngineSessionManager {
     ///
     /// # Returns
     /// A result indicating success or failure.
-    fn create_engine_session(&mut self, x11_session: X11Session, settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>, context: &zmq::Context)  -> Result<()> {
+    fn create_engine_session(&mut self, x11_session: X11Session, settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>, context: &zmq::Context) -> Result<()> {
         debug!("Creating Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", &x11_session.account().username(), &x11_session.display_id(), x11_session.id());
 
         // Spawn a new WebX Engine
-        let engine = self.engine_service.spawn_engine(&x11_session, context, settings, keyboard, engine_parameters)?;
+        if let Some(engine) = self.multi_try_spawn_engine(&x11_session, context, settings, keyboard, engine_parameters, 3) {
 
-        let mut session = EngineSession::new(x11_session, engine);
-        let session_id = session.id().to_string();
+            let mut session = EngineSession::new(x11_session, engine);
 
-        // Validate that the engine is running
-        if let Err(error) = self.engine_service.validate_engine(session.engine_mut(), &session_id, 3) {
-            // Make sure the engine process has stopped
-            session.stop_engine();
-            return Err(RouterError::EngineSessionError(format!("Failed to validate that WebX Engine is running for user \"{}\" with session id \"{}\": {}", session.username(), session.id(), error)));
+            // Validate that the engine is running
+            if let Err(error) = self.engine_service.validate_engine(session.engine_mut(), 3) {
+                // Make sure the engine process has stopped
+                session.stop_engine();
+                return Err(RouterError::EngineSessionError(format!("Failed to validate that WebX Engine is running for user \"{}\" with session id \"{}\": {}", session.username(), session.id(), error)));
+            }
+
+
+            debug!("Created session with id \"{}\" on display \"{}\" for user \"{}\"", session.id(), session.display_id(), session.username());
+
+            // Store session
+            if let Ok(mut sessions) = self.sessions.lock() {
+                sessions.push(session);
+            }
+
+            Ok(())
+        } else {
+            Err(RouterError::EngineSessionError(format!("Failed to launch WebX Engine for user \"{}\" with session id \"{}\"", x11_session.account().username(), x11_session.id())))
         }
+    }
 
-        debug!("Created session with id \"{}\" on display \"{}\" for user \"{}\"", &session.id(), &session.display_id(), &session.username());
+    fn multi_try_spawn_engine(&self, x11_session: &X11Session, context: &zmq::Context,  settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>, tries: u64) -> Option<Engine> {
+        let mut attempt = 1;
+        while attempt <= tries {
+            warn!("Starting WebX Engine for user \"{}\" with session id \"{}\" on display \"{}\" (attempt {} / {})", x11_session.account().username(), x11_session.id(), x11_session.display_id(), attempt, tries);
+            match self.engine_service.spawn_engine(&x11_session, context, settings, keyboard, engine_parameters) {
+                Ok(engine) => {
+                    thread::sleep(time::Duration::from_millis(2000));
 
-        // Store session
-        if let Ok(mut sessions) = self.sessions.lock() {
-            sessions.push(session);
+                    if engine.is_running().unwrap_or(true) {
+                        return Some(engine);
+                    }
+
+                    warn!("WebX Engine terminated prematurely for user \"{}\" with session id \"{}\"", x11_session.account().username(), x11_session.id());
+
+                },
+                Err(error) => {
+                    error!("Failed to spawn WebX Engine for user \"{}\" with session id \"{}\": {}", x11_session.account().username(), x11_session.id(), error);
+                    return None;
+                }
+            }
+            attempt += 1;
         }
-
-        Ok(())
+        None
     }
 }
