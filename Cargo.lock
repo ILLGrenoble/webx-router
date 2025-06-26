@@ -959,12 +959,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signal-child"
-version = "1.0.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3184fa464a0128cbcc353100ae752a848bc0067dd5715a50550f31570051150"
-
-[[package]]
 name = "signal-hook"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1274,7 +1268,6 @@ dependencies = [
  "serde",
  "serde_json",
  "shared_child",
- "signal-child",
  "structopt",
  "users",
  "uuid",

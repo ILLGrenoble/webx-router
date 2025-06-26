@@ -41,6 +41,10 @@ impl ProcessHandle {
         self.process.id()
     }
 
+    /// Checks if the process is still running.
+    ///
+    /// # Returns
+    /// A `Option` with Some(bool) indicating whether the process is running or not or None if unable to determine status of the process
     pub fn is_running(&self) -> Option<bool> {
         let terminate_result = self.process.try_wait();
         match terminate_result {

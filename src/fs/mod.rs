@@ -16,10 +16,10 @@ use crate::common::{Result, RouterError};
 /// A `Result` indicating success or an `RouterError` if the operation fails.
 pub fn chown(path: &str, uid: u32, gid: u32) -> Result<()> {
     let cpath =
-        CString::new(path).map_err(|error| RouterError::EnvironmentError(format!("{}", error)))?;
+        CString::new(path).map_err(|error| RouterError::SystemError(format!("{}", error)))?;
     match unsafe { libc::chown(cpath.as_ptr(), uid, gid) } {
         0 => Ok(()),
-        code => Err(RouterError::EnvironmentError(format!("Error changing ownership of file {}: {}", path, code))),
+        code => Err(RouterError::SystemError(format!("Error changing ownership of file {}: {}", path, code))),
     }
 }
 
@@ -32,7 +32,7 @@ pub fn chown(path: &str, uid: u32, gid: u32) -> Result<()> {
 /// A `Result` indicating success or an `RouterError` if the operation fails.
 pub fn mkdir(path: &str) -> Result<()> {
     if fs::create_dir_all(path).is_err() {
-        return Err(RouterError::EnvironmentError(format!("Could create directory for path: {}", path)));
+        return Err(RouterError::SystemError(format!("Could create directory for path: {}", path)));
     }
     Ok(())
 }
@@ -48,7 +48,7 @@ pub fn mkdir(path: &str) -> Result<()> {
 pub fn chmod(path: &str, mode: u32) -> Result<()> {
     let mode = Permissions::from_mode(mode);
     if fs::set_permissions(path, mode).is_err() {
-        return Err(RouterError::EnvironmentError(format!("Could not change permissions: {}", path)));
+        return Err(RouterError::SystemError(format!("Could not change permissions: {}", path)));
     }
     Ok(())
 }
@@ -68,7 +68,7 @@ pub fn touch(path: &str) -> Result<()> {
         .open(path)
         .is_err()
     {
-        return Err(RouterError::EnvironmentError(format!("Could not create file: {}", path)));
+        return Err(RouterError::SystemError(format!("Could not create file: {}", path)));
     }
     Ok(())
 }

@@ -20,8 +20,8 @@ pub enum RouterError {
     IoError(std::io::Error),
     /// Represents a configuration error.
     ConfigError(config::ConfigError),
+    /// Represents an authentication error
     AuthenticationError(String),
-    EnvironmentError(String),
 }
 
 impl Error for RouterError {}
@@ -36,7 +36,6 @@ impl fmt::Display for RouterError {
             RouterError::IoError(err) => writeln!(formatter, "IoError: {}", err),
             RouterError::ConfigError(err) => writeln!(formatter, "ConfigError: {}", err),
             RouterError::AuthenticationError(message) => writeln!(formatter, "AuthenticationError: {}", message),
-            RouterError::EnvironmentError(message) => writeln!(formatter, "EnvironmentError: {}", message),
         }
     }
 }
