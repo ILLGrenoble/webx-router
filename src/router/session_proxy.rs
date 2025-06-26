@@ -20,6 +20,19 @@ pub struct SessionProxy {
     is_running: bool,
 }
 
+#[repr(u32)]
+enum SessionCreationReturnCodes {
+    Success = 0,
+    InvalidRequestParameters = 1,
+    CreationError = 2,
+}
+
+impl SessionCreationReturnCodes {
+    fn to_u32(self) -> u32 {
+        self as u32
+    }
+}
+
 impl SessionProxy {
     /// Creates a new `SessionProxy` instance.
     ///
@@ -206,7 +219,7 @@ impl SessionProxy {
                     error!("Failed to decode create command: {}", error);
                     
                     // Send error response
-                    if let Err(error) = secure_rep_socket.send(format!("1,{}", error).as_str(), 0) {
+                    if let Err(error) = secure_rep_socket.send(format!("{},{}", SessionCreationReturnCodes::InvalidRequestParameters.to_u32(), error).as_str(), 0) {
                         error!("Failed to send session creation error response: {}", error);
                     }
                     send_empty = false;
@@ -289,10 +302,10 @@ impl SessionProxy {
     /// A string containing the session ID or an error message.
     fn get_or_create_session(&mut self, settings: &Settings, credentials: Credentials, resolution: ScreenResolution, keyboard: &str, engine_parameters: &HashMap<String, String>) -> String {
         match self.engine_session_manager.get_or_create_engine_session(settings, &credentials, resolution, keyboard, engine_parameters, &self.context) {
-            Ok(session_id) => format!("0,{}", session_id),
+            Ok(session_id) => format!("{},{}", SessionCreationReturnCodes::Success.to_u32(), session_id),
             Err(error) => {
                 error!("Failed to create session for user {}: {}", credentials.username(), error);
-                format!("1,{}", error)
+                format!("{},{}", SessionCreationReturnCodes::CreationError.to_u32(), error)
             }
         }
     }
