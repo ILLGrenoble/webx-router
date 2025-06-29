@@ -1,23 +1,17 @@
 #[macro_use]
 extern crate log;
-extern crate dotenv;
-extern crate pam_client2 as pam_client;
 
-use crate::app::Application;
-use crate::common::{Settings, RouterError, System};
+use webx_router::{
+    app::Server,
+    common::{Settings, RouterError, System},
+    fs,
+};
 
 use nix::unistd::{Uid, User};
 use structopt::StructOpt;
 use dotenv::dotenv;
 use std::process;
 
-mod app;
-mod authentication;
-mod sesman;
-mod fs;
-mod common;
-mod engine;
-mod router;
 
 /// Command-line options for the WebX Router application.
 #[derive(StructOpt, Debug)]
@@ -70,7 +64,7 @@ fn main() {
     }
 
     // Start the application.
-    if let Err(error) = Application::new().run(&mut settings) {
+    if let Err(error) = Server::new().run(&mut settings) {
         error!("{}", error);
         process::exit(1);
     }

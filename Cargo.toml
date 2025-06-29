@@ -28,6 +28,14 @@ pam-client2 = "0.5"
 shared_child = "1.0"
 rpassword = "7.3"
 
+[[bin]]
+name = "webx-router"
+path = "src/bin/router/main.rs"
+
+[[bin]]
+name = "webx-cli"
+path = "src/bin/cli/main.rs"
+
 [package.metadata.deb]
 maintainer = "Stuart Caunt <caunt@ill.fr>"
 copyright = "2022, Institut Laue Langevin"

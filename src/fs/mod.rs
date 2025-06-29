@@ -3,7 +3,15 @@ use std::fs;
 use std::fs::{OpenOptions, Permissions};
 use std::os::unix::fs::PermissionsExt;
 
+use std::path::Path;
+
 use crate::common::{Result, RouterError};
+
+// Group and other read/write bits
+const GROUP_READ: u32 = 0o040;
+const GROUP_WRITE: u32 = 0o020;
+const OTHER_READ: u32 = 0o004;
+const OTHER_WRITE: u32 = 0o002;
 
 /// Changes the ownership of a file or directory.
 ///
@@ -71,4 +79,28 @@ pub fn touch(path: &str) -> Result<()> {
         return Err(RouterError::SystemError(format!("Could not create file: {}", path)));
     }
     Ok(())
+}
+
+pub fn file_exists(path: &str) -> bool {
+    Path::new(path).exists()
+}
+
+pub fn file_params(path: &str) -> Option<fs::Metadata> {
+    if file_exists(path) {
+        match fs::metadata(Path::new(path)) {
+            Ok(metadata) => Some(metadata),
+            Err(error) => {
+                warn!("Unable obtain metadata from file at {}: {}", path, error);
+                None
+            }
+        }
+
+    } else {
+        warn!("Unable obtain metadata from file at {}: File doesn't exist", path);
+        None
+    }
+}
+
+pub fn user_only_permissions(mode: u32) -> bool {
+    (mode & (GROUP_READ | GROUP_WRITE | OTHER_READ | OTHER_WRITE)) == 0
 }

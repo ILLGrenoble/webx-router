@@ -64,50 +64,45 @@ impl EngineSessionManager {
     /// A reference to the created or retrieved session.
     pub fn get_or_create_engine_session(&mut self, settings: &Settings, credentials: &Credentials, resolution: ScreenResolution, keyboard: &str, engine_parameters: &HashMap<String, String>, context: &zmq::Context) -> Result<String> {
         // Request display/session Id from WebX Session Manager
-        match self.x11_session_manager.create_session(credentials, resolution) {
-            Ok(x11_session) => {
-                debug!("X11 session obtained for user \"{}\" on display \"{}\"", x11_session.account().username(), x11_session.display_id());
+        let x11_session = self.x11_session_manager.create_session(credentials, resolution)?;
 
-                if let Ok(mut sessions) = self.sessions.lock() {
-                    // See if session already exists matching x11_session attributes
-                    if let Some(session) = sessions.iter().find(|session| 
-                        session.username() == x11_session.account().username() && 
-                        session.id() == x11_session.id() && 
-                        session.display_id() == x11_session.display_id()) {
+        debug!("X11 session obtained for user \"{}\" on display \"{}\"", x11_session.account().username(), x11_session.display_id());
 
-                        debug!("Found existing Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", session.username(), session.display_id(), session.id());
-                        return Ok(session.id().to_string());
-                    }
+        if let Ok(mut sessions) = self.sessions.lock() {
+            // See if session already exists matching x11_session attributes
+            if let Some(session) = sessions.iter().find(|session| 
+                session.username() == x11_session.account().username() && 
+                session.id() == x11_session.id() && 
+                session.display_id() == x11_session.display_id()) {
 
-                    // Remove existing sessions for the user
-                    if let Some((index, session)) = sessions.iter_mut().enumerate().find(|(_, session)| session.username() == x11_session.account().username()) {
-                        debug!("Removing existing Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", session.username(), session.display_id(), session.id());
-                        // stop the engine session
-                        session.stop_engine();
-
-                        // Remove the old engine session
-                        sessions.remove(index);        
-                    }
-                } else {
-                    return Err(RouterError::EngineSessionError(format!("Failed to get session lock")));
-                }
-
-                // Create new session for the user
-                self.create_engine_session(x11_session, settings, keyboard, engine_parameters, context)?;
-
-                if let Ok(sessions) = self.sessions.lock() {
-                    // Return the newly created session
-                    match sessions.iter().find(|session| session.username() == credentials.username()) {
-                        Some(session) => Ok(session.id().to_string()),
-                        None => Err(RouterError::EngineSessionError(format!("Could not retrieve Engine Session for user \"{}\"", credentials.username())))
-                    }
-                } else {
-                    Err(RouterError::EngineSessionError(format!("failed to get session lock")))
-                }
-            },
-            Err(error) => {
-                return Err(RouterError::EngineSessionError(format!("Failed to create X11 session for user \"{}\": {}", credentials.username(), error)));
+                debug!("Found existing Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", session.username(), session.display_id(), session.id());
+                return Ok(session.id().to_string());
             }
+
+            // Remove existing sessions for the user
+            if let Some((index, session)) = sessions.iter_mut().enumerate().find(|(_, session)| session.username() == x11_session.account().username()) {
+                debug!("Removing existing Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", session.username(), session.display_id(), session.id());
+                // stop the engine session
+                session.stop_engine();
+
+                // Remove the old engine session
+                sessions.remove(index);        
+            }
+        } else {
+            return Err(RouterError::EngineSessionError(format!("Failed to get session lock")));
+        }
+
+        // Create new session for the user
+        self.create_engine_session(x11_session, settings, keyboard, engine_parameters, context)?;
+
+        if let Ok(sessions) = self.sessions.lock() {
+            // Return the newly created session
+            match sessions.iter().find(|session| session.username() == credentials.username()) {
+                Some(session) => Ok(session.id().to_string()),
+                None => Err(RouterError::EngineSessionError(format!("Could not retrieve Engine Session for user \"{}\"", credentials.username())))
+            }
+        } else {
+            Err(RouterError::EngineSessionError(format!("failed to get session lock")))
         }
     }
 
@@ -152,12 +147,10 @@ impl EngineSessionManager {
     /// The response from the session.
     pub fn send_engine_request(&mut self, session_id: &str, request: &str) -> Result<String> {
         if let Ok(mut sessions) = self.sessions.lock() {
-            if let Some(session) = sessions.iter_mut().find(|session| session.id() == session_id) {
-                self.engine_service.send_engine_request(session.engine_mut(), request)
-        
-            } else {
-                Err(RouterError::EngineSessionError(format!("Could not retrieve Engine Session with id \"{}\"", session_id)))
-            }
+            let session = sessions.iter_mut().find(|session| session.id() == session_id)
+                .ok_or_else(|| RouterError::EngineSessionError(format!("Could not retrieve Engine Session with id \"{}\"", session_id)))?;
+
+            self.engine_service.send_engine_request(session.engine_mut(), request)
 
         } else {
             Err(RouterError::EngineSessionError(format!("Failed to get sessions lock")))

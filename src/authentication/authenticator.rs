@@ -33,10 +33,22 @@ impl Authenticator {
     /// A `Result` containing an `EnvList` of environment variables if authentication succeeds,
     /// or an `ApplicationError` if authentication fails.
     pub fn authenticate(&self, credentials: &Credentials) -> Result<EnvList> {
-        let service = &self.service;
-        debug!("Authenticating user {} for service {}", credentials.username(), service);
-        let conversation =
-            Conversation::with_credentials(credentials.username(), credentials.password());
+        // Check for local file authentication of standard username/password
+        if credentials.is_credentials_file() {
+
+            credentials.validate_credentials_file()?;
+
+            debug!("Authenticating local user {}", credentials.username());
+            Authenticator::authenticate_with_service("su", &credentials)
+
+        } else {
+            debug!("Authenticating user {} for service {}", credentials.username(), self.service);
+            Authenticator::authenticate_with_service(&self.service, &credentials)
+        }
+    }
+
+    fn authenticate_with_service(service: &str, credentials: &Credentials) -> Result<EnvList> {
+        let conversation = Conversation::with_credentials(credentials.username(), credentials.password());
         let mut context = Context::new(service, None, conversation)?;
 
         context.authenticate(Flag::NONE)?;

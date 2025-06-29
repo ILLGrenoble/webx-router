@@ -4,11 +4,11 @@ use crate::router::Transport;
 use std::thread;
 
 /// Represents the main application responsible for initializing and running the WebX Router.
-pub struct Application {
+pub struct Server {
 }
 
-impl Application {
-    /// Creates a new instance of the `Application`.
+impl Server {
+    /// Creates a new instance of the `Server`.
     pub fn new() -> Self {
         Self {
         }

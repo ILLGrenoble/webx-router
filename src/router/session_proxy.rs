@@ -21,16 +21,28 @@ pub struct SessionProxy {
 }
 
 #[repr(u32)]
-enum SessionCreationReturnCodes {
+pub enum SessionCreationReturnCodes {
     Success = 0,
     InvalidRequestParameters = 1,
     CreationError = 2,
+    AuthenticationError = 3,
 }
 
 impl SessionCreationReturnCodes {
-    fn to_u32(self) -> u32 {
+    pub fn to_u32(self) -> u32 {
         self as u32
     }
+
+    pub fn try_from(value: u32) -> Result<Self> {
+        match value {
+            0 => Ok(SessionCreationReturnCodes::Success),
+            1 => Ok(SessionCreationReturnCodes::InvalidRequestParameters),
+            2 => Ok(SessionCreationReturnCodes::CreationError),
+            3 => Ok(SessionCreationReturnCodes::AuthenticationError),
+            _ => Err(RouterError::SystemError(format!("Failed to convert SessionCreationReturnCode {}", value))),
+        }
+    }
+
 }
 
 impl SessionProxy {
@@ -192,10 +204,21 @@ impl SessionProxy {
         } else if message_parts[0] == "create" {
             match self.decode_create_command(&message_parts) {
                 Ok((username, password, width, height, keyboard, engine_parameters)) => {
-                    info!("Got session create command for user \"{}\"", username);
 
+                    let credentials = match Credentials::new(username, password) {
+                        Ok(credentials) => credentials,
+                        Err(err) => {
+                            if let Err(error) = secure_rep_socket.send(format!("{},{}", SessionCreationReturnCodes::AuthenticationError.to_u32(), err).as_str(), 0) {
+                                error!("Failed to send session creation error response: {}", error);
+                            }
+                            return;
+                        }
+                    };
+
+                    info!("Got session create command for user \"{}\"", credentials.username());
+                        
                     // Request session from WebX Session Manager
-                    let message = self.get_or_create_session(settings, Credentials::new(username, password), ScreenResolution::new(width, height), &keyboard, &engine_parameters);
+                    let message = self.get_or_create_session(settings, credentials, ScreenResolution::new(width, height), &keyboard, &engine_parameters);
 
                     // Debug output of all X11 sessions
                     let all_x11_sessions = self.engine_session_manager.get_all_x11_sessions().map(|sessions| {
@@ -305,7 +328,14 @@ impl SessionProxy {
             Ok(session_id) => format!("{},{}", SessionCreationReturnCodes::Success.to_u32(), session_id),
             Err(error) => {
                 error!("Failed to create session for user {}: {}", credentials.username(), error);
-                format!("{},{}", SessionCreationReturnCodes::CreationError.to_u32(), error)
+                match error {
+                    RouterError::AuthenticationError(_) => {
+                        format!("{},{}", SessionCreationReturnCodes::AuthenticationError.to_u32(), error)
+                    },
+                    _ => {
+                        format!("{},{}", SessionCreationReturnCodes::CreationError.to_u32(), error)
+                    }
+                }
             }
         }
     }

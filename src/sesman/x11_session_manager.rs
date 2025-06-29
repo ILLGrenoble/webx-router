@@ -35,35 +35,30 @@ impl X11SessionManager {
     /// # Returns
     /// A `Result` containing the created `Session` or an `ApplicationError`.
     pub fn create_session(&self, credentials: &Credentials, resolution: ScreenResolution) -> Result<X11Session> {
-        return match self.authenticator.authenticate(credentials) {
-            Ok(environment) => {
-                debug!("Successfully authenticated user: \"{}\"", &credentials.username());
-                if let Ok(Some(user)) = User::from_name(credentials.username()) {
-                    if let Some(account) = Account::from_user(user) {
+        let environment = self.authenticator.authenticate(credentials)?;
+        debug!("Successfully authenticated user: \"{}\"", &credentials.username());
+        
+        if let Ok(Some(user)) = User::from_name(credentials.username()) {
+            if let Some(account) = Account::from_user(user) {
 
-                        // if the user already has an x session running then exit early...
-                        if let Some(session) = self.xorg_service.get_session_for_user(account.uid()) {
-                            debug!("User {} already has a session {}", &credentials.username(), session.id());
-                            return Ok(session);
-                        }
-
-                        let webx_user = User::from_name("webx").unwrap().unwrap();
-                        // create the necessary configuration files
-                        if let Err(error) = self.xorg_service.create_user_files(&account, &webx_user) {
-                            return Err(RouterError::X11SessionError(format!("Error occurred setting up the configuration for a session {}", error)));
-                        }
-
-                        // finally, let's launch the x server...
-                        return self.xorg_service.execute(&account, &webx_user, resolution, environment);
-                    }
-                    return Err(RouterError::X11SessionError(format!("User \"{}\" is invalid. check they have a home directory?", credentials.username())));
+                // if the user already has an x session running then exit early...
+                if let Some(session) = self.xorg_service.get_session_for_user(account.uid()) {
+                    debug!("User {} already has a session {}", &credentials.username(), session.id());
+                    return Ok(session);
                 }
-                Err(RouterError::X11SessionError(format!("Could not find user \"{}\"", credentials.username())))
+
+                let webx_user = User::from_name("webx").unwrap().unwrap();
+                // create the necessary configuration files
+                if let Err(error) = self.xorg_service.create_user_files(&account, &webx_user) {
+                    return Err(RouterError::X11SessionError(format!("Error occurred setting up the configuration for a session {}", error)));
+                }
+
+                // finally, let's launch the x server...
+                return self.xorg_service.execute(&account, &webx_user, resolution, environment);
             }
-            Err(error) => {
-                Err(RouterError::X11SessionError(format!("Error authenticating user \"{}\"", error)))
-            }
+            return Err(RouterError::AuthenticationError(format!("User \"{}\" is invalid. check they have a home directory?", credentials.username())));
         }
+        Err(RouterError::AuthenticationError(format!("Could not find user \"{}\"", credentials.username())))
     }
 
     /// Retrieves all active sessions.
