@@ -4,14 +4,17 @@
 
 The WebX Router manages WebX sessions in a multiuser environment, routing requests, instructions and messages between running WebX Engines and the WebX Relay.
 
-It uses the WebX Session Manager to authenticate user connection requests and to spawn Xorg and window manager processes. WebX Engines are then launched by the Router with corresponding DISPLAY and XAUTHORITY environment variables.
+It authenticates user connection requests (using the PAM library) and spawns Xorg and window manager processes. WebX Engines are then launched with corresponding DISPLAY and XAUTHORITY environment variables.
 
-The WebX Router manages multiple ZeroMQ sockets to communicate with the WebX Relay (TCP), the WebX Session Manager (IPC) and the multiple WebX Engines (IPC). ZeroMQ is also used for internal messaging (Inproc).
+The WebX Router manages multiple ZeroMQ sockets to communicate with the WebX Relay (TCP) and the multiple WebX Engines (IPC). ZeroMQ is also used for internal messaging (Inproc).
+
+A CLI is also provided for local access to the WebX Router server providing authenticated session creation requests.
 
 ### Included in this project
 
 This project includes:
- - The WebX Router Rust source code
+ - The WebX Router server Rust source code
+ - The WebX CLI Rust source code
  - VSCode Launch commands
  - Dockerfiles to build the WebX Router and package it in a Debian Package
  - Github actions to buid Debian Packages and add them to releases
@@ -26,8 +29,7 @@ WebX's principal differentiation to other Remote Desktop technologies is that it
 
 The WebX remote desktop stack is composed of a number of different projects:
  - [WebX Engine](https://github.com/ILLGrenoble/webx-engine) The WebX Engine is the core of WebX providing a server that connects to an X11 display obtaining window parameters and images. It listens to X11 events and forwards event data to connected clients. Remote clients similarly interact with the desktop and the actions they send to the WebX Engine are forwarded to X11.
- - [WebX Router](https://github.com/ILLGrenoble/webx-router) The WebX Router manages multiple WebX sessions on single host, routing traffic between running WebX Engines and the WebX Relay. 
- - [WebX Session Manager](https://github.com/ILLGrenoble/webx-session-manager) The WebX Session manager is used by the WebX Router to authenticate and initiate new WebX sessions. X11 displays and desktop managers are spawned when new clients successfully authenticate.
+ - [WebX Router](https://github.com/ILLGrenoble/webx-router) The WebX Router manages multiple WebX sessions on single host, routing traffic between running WebX Engines and the WebX Relay. It authenticates session creation requests and spawns Xorg, window manager and WebX Engine processes.
  - [WebX Relay](https://github.com/ILLGrenoble/webx-relay) The WebX Relay provides a Java library that can be integrated into the backend of a web application, providing bridge functionality between WebX host machines and client browsers. TCP sockets (using the ZMQ protocol) connect the relay to host machines and websockets connect the client browsers to the relay. The relay transports data between a specific client and corresponding WebX Router/Engine.
  - [WebX Client](https://github.com/ILLGrenoble/webx-client) The WebX Client is a javascript package (available via NPM) that provides rendering capabilities for the remote desktop and transfers user input events to the WebX Engine via the relay.
 
@@ -38,11 +40,11 @@ To showcase the WebX technology, a demo is available. The demo also allows for s
 
  The following projects assist in the development of WebX:
  - [WebX Dev Environment](https://github.com/ILLGrenoble/webx-dev-env) This provides a number of Docker environments that contain the necessary libraries and applications to build and run a WebX Engine in a container. Xorg and Xfce4 are both launched when the container is started. Mounting the WebX Engine source inside the container allows it to be built there too.
- - [WebX Dev Workspace](https://github.com/ILLGrenoble/webx-dev-workspace) The WebX Dev Workspace regroups the WebX Engine, WebX Router and WebX Session Manager as git submodules and provides a devcontainer environment with the necessary build and runtime tools to develop and debug all three projects in a single docker environment. Combined with the WebX Demo Deploy project it provides an ideal way of developing and testing the full WebX remote desktop stack.
+ - [WebX Dev Workspace](https://github.com/ILLGrenoble/webx-dev-workspace) The WebX Dev Workspace regroups the WebX Engine and WebX Router as git submodules and provides a devcontainer environment with the necessary build and runtime tools to develop and debug all three projects in a single docker environment. Combined with the WebX Demo Deploy project it provides an ideal way of developing and testing the full WebX remote desktop stack.
 
 ## Development
 
-The WebX Router is designed to be built and run in a Linux environment and runs in connection with a WebX Session Manager process. It spawns WebX Engine processes that connect to Xorg displays. Development can be made directly on a linux machine providing the relevant libraries are installed or (as recommendd) development can be performed within a devcontainer.
+The WebX Router is designed to be built and run in a Linux environment. It spawns Xorg, Window Manager and WebX Engine processes. Development can be made directly on a linux machine providing the relevant libraries are installed or (as recommendd) development can be performed within a devcontainer.
 
 ### Building and running from source on a linux machine
 
@@ -83,13 +85,27 @@ The configuration file `config.yml` is used to define the logging level, TCP por
 
 ### Building, running and debugging using the WebX Dev Workspace
 
-The [WebX Dev Workspace](https://github.com/ILLGrenoble/webx-dev-env) combines the development of The WebX Engine, WebX Router and WebX Session Manager in a single workspace and the development and testing of all of these can be combined in a single devcontainer environment.
+The [WebX Dev Workspace](https://github.com/ILLGrenoble/webx-dev-env) combines the development of The WebX Engine and WebX Router in a single workspace and the development and testing of these can be combined in a single devcontainer environment.
 
 This is the recommended way of building, running and debuggine the WebX stack as it provides the most flexible approach to development without installing any dependencies. The environment is configured to easily run the three projects together and contains VSCode Launch Commands to debug the application.
 
-In the devcontainer you should start by building the WebX Engine then launch the WebX Router and WebX Session Manager using the VSCode Launch Commands. The WebX Router can be debugged using the standard VSCode debugger.
+In the devcontainer you should start by building the WebX Engine then launch the WebX Router using the VSCode Launch Commands. The WebX Router can be debugged using the standard VSCode debugger.
 
 Please refer to the project's README for more information.
+
+### Creating a WebX session using the CLI
+
+The CLI is designed to run on the same host as the router and provides access to creating a WebX session (Engine and X11 processes) for the user running the command. Authentication is handled automatically.
+
+A session can be created as follows:
+
+```
+./target/debug/webx-cli create --width 1920 --hiehgt 1080 --keyboard-layout fr
+```
+
+This will create a new WebX session for the logged in user (if one doesn't already exist). By default the command remains in the foreground and will _ping_ the session every 5 seconds. Ctrl-C will quit the command. 
+
+To run the command and exit immediately add the `--daemon` option to the command line.
 
 ### Running the WebX Demo to test the WebX Remote Desktop Stack
 
@@ -107,12 +123,12 @@ You need to set the host of the WebX Server: running in a local devcontainer, se
 
 Using the WebX Dev Workspace, you can log in with any of the pre-defined users (mario, luigi, peach, toad, yoshi and bowser), the password is the same as the username.
 
-This will send the request to the WebX Router: the WebX Session Manager will authenticate the user and run Xorg and Xfce4 for the user; WebX Router then launches the locally-built webx-engine.
+This will send the request to the WebX Router: the user is authenticated and then Xorg and Xfce4 processes are run for the user; WebX Router then launches the locally-built webx-engine.
 
 ## Design
 
 There are three main functionalities for the WebX Router:
- - Delegating requests for X11 sessions (including authentication and X11 session creation) to the WebX Session Manager
+ - Authentication and X11 session creation
  - Managing a collection of WebX Engines (connected to the X11 sessions) on the same host
  - Routing instructions and messages between a WebX Relay and WebX Engines (based on a session Id that prefixes all instructions and messages)
 
@@ -120,7 +136,7 @@ There are three main functionalities for the WebX Router:
 
 The WebX Router accepts connections from other hosts using ZeroMQ TCP sockets. Connections are made from the WebX Relay - typically there should only be a single WebX Relay connecting to the router.
 
-Connections to the WebX Session Manager and WebX Engines are on the same host so use ZeroMQ IPC sockets (standard unix sockets). 
+Connections to the WebX Engines are on the same host so use ZeroMQ IPC sockets (standard unix sockets). 
 
 Messaging within the application is provided through ZeroMQ InProc internal messaging.
 
@@ -150,7 +166,7 @@ The WebX Relay has filters messages by the sessionId and forwards them to the co
 
 Session creation requests occur using the Session Proxy. This socket runs the request-response pattern (`ZMQ_REP`) and is an encrypted TCP socket that allows for username and password to be passed from the relay.
 
-With the creation command a connection to the WebX Session Manager is made (using another `ZMQ_REP` IPC socket) and a new X11 session requested (unless one already exists for the user).
+With the creation command a new X11 session will be created (unless one already exists for the user).
 
 ##### Authentication over encrypted sockets
 
@@ -170,27 +186,30 @@ The liveliness messages that are prefixed with a sessionId are forwarded to the 
 
 ### Session management
 
-The WebX Router maintains a collection of X11 sessions and associated WebX Engine. X11 session creation is delegated to the WebX Session Manager. A WebX Engine is spawned for the X11 session if necessary.
+The WebX Router maintains a collection of X11 sessions and associated WebX Engine. New X11 sessions and WebX Engines are created if necessary.
 
-The WebX Session Manager generates a unique Id for each session: the WebX Router uses an environment variable when spawning a WebX Engine to forward this information to it. The Id is used to prefix all messages from an Engine and all instructions to it.
+Each session has a unique Id: the WebX Router uses an environment variable when spawning a WebX Engine to forward this information to it. The Id is used to prefix all messages from an Engine and all instructions to it.
 
-When receiving session creation requests from a particular user, the WebX Router verifies that the X11 session Id is always valid: if the WebX Session Manager returns a new session Id then the WebX router will spawn a new WebX Engine. 
+When receiving session creation requests from a particular user, the WebX Router verifies that the X11 session Id is always valid: a new session Id is returned if the Xorg process is recreated and then the WebX Router will spawn a new WebX Engine. 
 
-#### Requests to WebX Session Manager
+#### X11 session creation
 
-On receiving session creation requests with login credentials, a new socket connection is made to the WebX Session Manager. The login details along with the requested session screen width and height are sent as request parameters.
+Authentication is provided using a standard linux PAM service that verifies the username and password.
 
-The WebX Session Manager validates the login credentials using the PAM services. Having successfully authenticated the user, it will determine if an X11 session is already running or whether a new one is required.
+Once authenticated, the server will determine if an X11 session is already running or not.
 
-In its response, the WebX Session Manager communicated the following details for the X11 session:
- - the unique session id
- - user details (username and UID)
- - the DISPLAY id 
- - the XAUTHORITY path
+If a new X11 session is required the server will:
+
+- Spawn a configured Xorg processes using the UID and GID of the user with the desired screen resolution. A unique DISPLAY environment variable is selected (a simple counter from 60) and the X11 server is secured using the XAUTHORITY environment variable.
+- Spawn a configured window manager. This is typically a script to start the desired manager. By default a script is included to start Xfce4. The environment variables necessary to connect to the X11 server (DISPLAY, XAUTHORITY) are passed to the window management script which runs using the user's UID and GID.
+
+Each session has its own unique sessionId.
+
+Each Xorg and window manager has it's own log files generated for debugging purposes.
 
 #### Spawning WebX Engine sessions
 
-Using the information returned by the WebX Session Manager the WebX Router will determine if a WebX Engine is running or not. 
+The WebX Router will determine if a WebX Engine is running or not for a given X11 session. 
 
 If a new WebX Engine is required it spawns a new process using the user's UID as process owner.
 
