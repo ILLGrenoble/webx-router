@@ -1,6 +1,6 @@
 [package]
 name = "webx-router"
-description = "The WebX Router manages multiple WebX sessions, routing requests, instructions and messages between running WebX Engines and the WebX Relay."
+description = "The WebX Router manages multiple WebX sessions, routing requests, instructions and messages between running WebX Engines and the WebX Relay. It authenticates user credentials and creates sessions by launching Xorg, window manager and WebX Engine processes."
 readme = "README.md"
 license-file = "LICENSE"
 version = "0.0.0-dev"
@@ -41,7 +41,8 @@ maintainer = "Stuart Caunt <caunt@ill.fr>"
 copyright = "2022, Institut Laue Langevin"
 license-file = ["LICENSE", "0"]
 extended-description = ""
-depends = "$auto"
+depends = "$auto, xorgxrdp, dbus-x11"
+recommends = "xfce4"
 section = "net"
 priority = "optional"
 maintainer-scripts = "./debian-scripts"
@@ -49,6 +50,7 @@ systemd-units = {}
 conf-files = ["/etc/webx/webx-router-config.yml", "/etc/webx/startwm.sh"]
 assets = [
     ["target/release/webx-router", "usr/bin/", "755"],
+    ["target/release/webx-cli", "usr/bin/", "755"],
     ["config.example.yml", "/etc/webx/webx-router-config.yml", "644"],
     ["bin/pam-webx", "/etc/pam.d/webx", "644"],
     ["bin/startwm.sh", "/etc/webx/startwm.sh", "755"],
