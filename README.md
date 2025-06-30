@@ -81,7 +81,7 @@ The WebX Router can either be launched by using the VSCode Launch Command <em>De
 
 #### WebX Router configuration
 
-The configuration file `config.yml` is used to define the logging level, TCP ports, IPC paths, WebX Engine path. This file can be located in the working directory or `/etc/webx/webx-router-config.yml`. Alternatively each configuration value can be overridden by an environment variable, prefixed by WEBX_ROUTER. For example, the `engine: path:` configuration value can be overridden by the environment variable `WEBX_ROUTER_ENGINE_PATH`.
+The configuration file `config.yml` is used to define the logging level, TCP ports, IPC paths, WebX Engine path, Xorg config path, Window manager run scripts. An example file is provided (`config.example.yml`). This file can be located in the working directory or `/etc/webx/webx-router-config.yml`. Alternatively each configuration value can be overridden by an environment variable, prefixed by WEBX_ROUTER. For example, the `engine: path:` configuration value can be overridden by the environment variable `WEBX_ROUTER_ENGINE_PATH`.
 
 ### Building, running and debugging using the WebX Dev Workspace
 

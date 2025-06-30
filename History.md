@@ -1,3 +1,22 @@
+1.4.0 30/06/2025
+================
+ * Use a session "secret" rather than session_id in communication to the webx engine so that it is invisible to all other users on the host. Only authenticated users of the session can know the secret.
+ * update readme to include legacy session manager functionality.
+ * Build a client (cli) application that can create and list webx sessions. Cli can repeatedly ping the engine to verify that it is running.
+ * Update authentication to allow local file (owner and read-only by the user of the cli) with auto-generated password.
+ * General improvements to error handling and addition of AuthenticationError as response code to creation
+ * Send creation reponse code (distinguish incorrect params from creation error).
+ * Wrap the Engine process in a ProcessHandle.  Try 3 times to start the webx-engine (in case Xorg is slow to start).
+ * Improve logging
+ * Remove engine session container: use mutex protected Vec of EngineSessions in EngineSessionManager.
+ * Refactor engine_connector to engine_communicator and attach to engine struct (one per engine): keep socket open for duration of engine life.
+ * Refactoring engine related files to engine module (remove service module).
+ * Move config to an example file. add config.yml to gitignore.
+ * Separate Engine creation/communication from EngineSession management.
+ * Merge of webx-session-manager into webx-router: creation/management of Xorg and Window manager processes handled here rather than making zmq requests to the session manager.
+
+> Note that from this version the [WebX Session Manager](https://github.com/ILLGrenoble/webx-session-manager) is not longer necessary.
+
 1.3.0 07/05/2025
 ================
  * Remove specific limit on number of parameters expected for session commands (allow for future additional parameters)
