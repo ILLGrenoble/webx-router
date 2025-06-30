@@ -4,7 +4,7 @@ FROM rust:1-slim-bullseye AS debian11
 WORKDIR /app
 
 RUN apt update
-RUN apt install -y libzmq3-dev pkg-config dpkg-dev
+RUN apt install -y libzmq3-dev pkg-config dpkg-dev libclang-dev libpam-dev clang
 
 COPY . .
 
@@ -18,7 +18,7 @@ FROM rust:1-slim-bookworm AS debian12
 WORKDIR /app
 
 RUN apt update
-RUN apt install -y libzmq3-dev pkg-config dpkg-dev
+RUN apt install -y libzmq3-dev pkg-config dpkg-dev libclang-dev libpam-dev clang
 
 COPY . .
 
