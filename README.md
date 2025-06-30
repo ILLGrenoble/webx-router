@@ -40,7 +40,7 @@ To showcase the WebX technology, a demo is available. The demo also allows for s
 
  The following projects assist in the development of WebX:
  - [WebX Dev Environment](https://github.com/ILLGrenoble/webx-dev-env) This provides a number of Docker environments that contain the necessary libraries and applications to build and run a WebX Engine in a container. Xorg and Xfce4 are both launched when the container is started. Mounting the WebX Engine source inside the container allows it to be built there too.
- - [WebX Dev Workspace](https://github.com/ILLGrenoble/webx-dev-workspace) The WebX Dev Workspace regroups the WebX Engine and WebX Router as git submodules and provides a devcontainer environment with the necessary build and runtime tools to develop and debug all three projects in a single docker environment. Combined with the WebX Demo Deploy project it provides an ideal way of developing and testing the full WebX remote desktop stack.
+ - [WebX Dev Workspace](https://github.com/ILLGrenoble/webx-dev-workspace) The WebX Dev Workspace regroups the WebX Engine and WebX Router as git submodules and provides a devcontainer environment with the necessary build and runtime tools to develop and debug all the projects in a single docker environment. Combined with the WebX Demo Deploy project it provides an ideal way of developing and testing the full WebX remote desktop stack.
 
 ## Development
 
@@ -87,7 +87,7 @@ The configuration file `config.yml` is used to define the logging level, TCP por
 
 The [WebX Dev Workspace](https://github.com/ILLGrenoble/webx-dev-env) combines the development of The WebX Engine and WebX Router in a single workspace and the development and testing of these can be combined in a single devcontainer environment.
 
-This is the recommended way of building, running and debuggine the WebX stack as it provides the most flexible approach to development without installing any dependencies. The environment is configured to easily run the three projects together and contains VSCode Launch Commands to debug the application.
+This is the recommended way of building, running and debuggine the WebX stack as it provides the most flexible approach to development without installing any dependencies. The environment is configured to easily run the projects together and contains VSCode Launch Commands to debug the application.
 
 In the devcontainer you should start by building the WebX Engine then launch the WebX Router using the VSCode Launch Commands. The WebX Router can be debugged using the standard VSCode debugger.
 
