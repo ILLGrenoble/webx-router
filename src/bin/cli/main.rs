@@ -102,7 +102,13 @@ fn main() {
 
         }
         Command::List => {
-            info!("Got list command");
+
+            match cli.list() {
+                Ok(response) => {
+                    info!("Current WebX sessions:\n{}", &response);
+                },
+                Err(error) => error!("List command failed: {}", error)
+            }
         }
     }
 

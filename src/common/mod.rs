@@ -10,6 +10,11 @@ mod settings;
 mod system;
 mod process_handle;
 
+use rand::{
+    rng, 
+    Rng,
+    distr::Alphanumeric,
+};
 
 /// Converts a camelCase string to snake_case
 pub fn to_snake_case(camel_case: &str) -> String {
@@ -27,4 +32,12 @@ pub fn to_snake_case(camel_case: &str) -> String {
         }
     }
     result
+}
+
+pub fn random_string(length: usize) -> String {
+    rng()
+        .sample_iter(&Alphanumeric)
+        .take(length)
+        .map(char::from)
+        .collect()
 }

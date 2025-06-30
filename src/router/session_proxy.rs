@@ -220,18 +220,6 @@ impl SessionProxy {
                     // Request session from WebX Session Manager
                     let message = self.get_or_create_session(settings, credentials, ScreenResolution::new(width, height), &keyboard, &engine_parameters);
 
-                    // Debug output of all X11 sessions
-                    let all_x11_sessions = self.engine_session_manager.get_all_x11_sessions().map(|sessions| {
-                        sessions.iter().map(|session| 
-                            format!("id={},width={},height={},username={},uid={}", 
-                                session.id(),
-                                session.resolution().width(),
-                                session.resolution().height(),
-                                session.account().username(),
-                                session.account().uid())).collect::<Vec<String>>().join("\n")
-                    }).unwrap_or_default();
-                    debug!("All X11 sessions:\n{}", all_x11_sessions);
-
                     // Send message response
                     if let Err(error) = secure_rep_socket.send(message.as_str(), 0) {
                         error!("Failed to send session creation response: {}", error);
@@ -248,6 +236,26 @@ impl SessionProxy {
                     send_empty = false;
                 }
             }
+
+
+        } else if message_parts[0] == "list" {
+            // Debug output of all X11 sessions
+            let all_x11_sessions = self.engine_session_manager.get_all_x11_sessions().map(|sessions| {
+                sessions.iter().map(|session| 
+                    format!("id={},width={},height={},username={},uid={}", 
+                        session.id(),
+                        session.resolution().width(),
+                        session.resolution().height(),
+                        session.account().username(),
+                        session.account().uid()),
+                    ).collect::<Vec<String>>().join("\n")
+            }).unwrap_or_default();
+            debug!("All X11 sessions:\n{}", all_x11_sessions);
+
+            if let Err(error) = secure_rep_socket.send(all_x11_sessions.as_str(), 0) {
+                error!("Failed to send list of all sessions: {}", error);
+            }
+            send_empty = false;
 
         } else if message_parts[0] == "connect" {
 

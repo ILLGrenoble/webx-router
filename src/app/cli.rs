@@ -1,13 +1,8 @@
-use crate::common::{Result, RouterError};
+use crate::common::{Result, RouterError, random_string};
 use crate::router::SessionCreationReturnCodes;
 use crate::fs::chmod;
 
 use base64::engine::{general_purpose::STANDARD, Engine};
-use rand::{
-    rng, 
-    Rng,
-    distr::Alphanumeric,
-};
 use std::{
     fs::File,
     io::Write,
@@ -84,12 +79,12 @@ impl Cli {
         info!("Creating WebX Engine Session command with resolution {} x {} and keyboard layout {}", width, height, keyboard_layout);
 
         // Create credentials file in /tmp (ro by the user)
-        let credentials_path = format!("/tmp/{}", self.create_random_string(8));
+        let credentials_path = format!("/tmp/{}", random_string(8));
         let mut file = File::create(&credentials_path)?;
         chmod(&credentials_path, 0o600)?;
 
         // create and write a random password
-        let password = self.create_random_string(32);
+        let password = random_string(32);
         file.write_all(password.as_bytes())?;
 
         debug!("Credentials written to {}", credentials_path);
@@ -103,6 +98,17 @@ impl Cli {
         std::fs::remove_file(&credentials_path)?;
 
         self.decode_create_response(&response)
+    }
+
+    pub fn list(&self) -> Result<String> {
+        let session_socket = self.session_socket.as_ref().ok_or_else(|| RouterError::SystemError(format!("Session Socket is unavailable")))?;
+
+        debug!("Sending list request to WebX Router...");
+        let response = self.send(&session_socket.socket, "list")?;
+
+        debug!("... received response {}", response);
+
+        Ok(response)
     }
 
     pub fn wait_for_interrupt(&self, session_id: &str) -> Result<()> {
@@ -226,12 +232,5 @@ impl Cli {
         STANDARD.encode(input)
     }
 
-    fn create_random_string(&self, length: usize) -> String {
-        rng()
-            .sample_iter(&Alphanumeric)
-            .take(length)
-            .map(char::from)
-            .collect()
-    }
 }
 
