@@ -20,7 +20,13 @@ pub struct EngineSessionManager {
 }
 
 impl EngineSessionManager {
-    /// Creates a new `SessionService` instance.
+    /// Creates a new `EngineSessionManager` instance.
+    ///
+    /// # Arguments
+    /// * `settings` - The session manager settings.
+    ///
+    /// # Returns
+    /// * `EngineSessionManager` - A new instance.
     pub fn new(settings: &SesManSettings) -> Self {
         Self {
             x11_session_manager: X11SessionManager::new(settings),
@@ -29,14 +35,13 @@ impl EngineSessionManager {
         }
     }
 
-    /// Stops all active engines and .
+    /// Stops all active engines and clears all sessions.
     pub fn shutdown(&mut self) {
         if let Ok(mut sessions) = self.sessions.lock() {
             for session in sessions.iter_mut() {
                session.stop_engine();
             }
             sessions.clear();
-        
         } else {
            error!("Failed to obtain sessions mutex to kill all Engine Sessions during shutdown");
         }
@@ -46,6 +51,10 @@ impl EngineSessionManager {
         }
     }
 
+    /// Retrieves all X11 sessions.
+    ///
+    /// # Returns
+    /// * `Option<Vec<X11Session>>` - Some vector of sessions if available, or None.
     pub fn get_all_x11_sessions(&self) -> Option<Vec<X11Session>> {
         self.x11_session_manager.get_all()
     }
@@ -58,6 +67,7 @@ impl EngineSessionManager {
     /// * `credentials` - The credentials of the user.
     /// * `resolution` - The screen resolution of the session display.
     /// * `keyboard` - The keyboard layout.
+    /// * `engine_parameters` - Additional engine parameters.
     /// * `context` - The ZeroMQ context.
     ///
     /// # Returns
@@ -110,10 +120,9 @@ impl EngineSessionManager {
     ///
     /// # Arguments
     /// * `session_id` - The ID of the session to ping.
-    /// * `context` - The ZeroMQ context.
     ///
     /// # Returns
-    /// A result indicating success or failure.
+    /// * `Result<()>` - Ok if the engine is active, Err otherwise.
     pub fn ping_engine(&mut self, session_id: &str) -> Result<()> {
         if let Ok(mut sessions) = self.sessions.lock() {
             let (index, session) = sessions.iter_mut().enumerate().find(|(_, session)| session.id() == session_id)
@@ -140,11 +149,10 @@ impl EngineSessionManager {
     ///
     /// # Arguments
     /// * `session_id` - The ID of the session.
-    /// * `context` - The ZeroMQ context.
     /// * `request` - The request string to send.
     ///
     /// # Returns
-    /// The response from the session.
+    /// * `Result<String>` - The response from the session, or an error.
     pub fn send_engine_request(&mut self, session_id: &str, request: &str) -> Result<String> {
         if let Ok(mut sessions) = self.sessions.lock() {
             let session = sessions.iter_mut().find(|session| session.id() == session_id)
@@ -173,7 +181,6 @@ impl EngineSessionManager {
     ///
     /// # Arguments
     /// * `settings` - The application settings.
-    /// * `context` - The ZeroMQ context.
     pub fn cleanup_inactive_engine_sessions(&mut self, settings: &Settings) {
         if settings.sesman.auto_logout_s > 0 {
             if let Ok(mut sessions) = self.sessions.lock() {
@@ -209,6 +216,7 @@ impl EngineSessionManager {
     /// * `x11_session` - The X11 session details.
     /// * `settings` - The application settings.
     /// * `keyboard` - The keyboard layout.
+    /// * `engine_parameters` - Additional engine parameters.
     /// * `context` - The ZeroMQ context.
     ///
     /// # Returns
@@ -228,7 +236,6 @@ impl EngineSessionManager {
                 return Err(RouterError::EngineSessionError(format!("Failed to validate that WebX Engine is running for user \"{}\" with session id \"{}\": {}", session.username(), session.id(), error)));
             }
 
-
             debug!("Created session with id \"{}\" on display \"{}\" for user \"{}\"", session.id(), session.display_id(), session.username());
 
             // Store session
@@ -242,6 +249,18 @@ impl EngineSessionManager {
         }
     }
 
+    /// Attempts to spawn a WebX Engine process multiple times until successful or the maximum number of tries is reached.
+    ///
+    /// # Arguments
+    /// * `x11_session` - The X11 session details.
+    /// * `context` - The ZeroMQ context.
+    /// * `settings` - The application settings.
+    /// * `keyboard` - The keyboard layout.
+    /// * `engine_parameters` - Additional engine parameters.
+    /// * `tries` - The maximum number of attempts.
+    ///
+    /// # Returns
+    /// * `Option<Engine>` - Some(Engine) if successful, None otherwise.
     fn multi_try_spawn_engine(&self, x11_session: &X11Session, context: &zmq::Context,  settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>, tries: u64) -> Option<Engine> {
         let mut attempt = 1;
         while attempt <= tries {

@@ -17,11 +17,15 @@ use std::{
     },
 };
 
+/// Provides methods to manage and interact with WebX Engine processes and sessions.
 pub struct EngineService {
 }
 
 impl EngineService {
-    /// Creates a new `SessionService` instance.
+    /// Creates a new `EngineService` instance.
+    ///
+    /// # Returns
+    /// * `EngineService` - A new instance of the service.
     pub fn new() -> Self {
         Self {
         }
@@ -30,12 +34,11 @@ impl EngineService {
     /// Sends a request to a WebX Engine and retrieves the response.
     ///
     /// # Arguments
-    /// * `session_id` - The ID of the session.
-    /// * `context` - The ZeroMQ context.
+    /// * `engine` - The mutable reference to the WebX Engine instance.
     /// * `request` - The request string to send.
     ///
     /// # Returns
-    /// The response from the session.
+    /// * `Result<String>` - The response from the engine, or an error if communication fails.
     pub fn send_engine_request(&mut self, engine: &mut Engine, request: &str) -> Result<String> {
         engine.send_request(request)
     }
@@ -44,11 +47,13 @@ impl EngineService {
     ///
     /// # Arguments
     /// * `x11_session` - The X11 session details.
+    /// * `context` - The ZeroMQ context.
     /// * `settings` - The application settings.
     /// * `keyboard` - The keyboard layout.
+    /// * `engine_parameters` - Additional engine parameters as a HashMap.
     ///
     /// # Returns
-    /// The spawned WebX Engine instance.
+    /// * `Result<Engine>` - The spawned WebX Engine instance, or an error if spawning fails.
     pub fn spawn_engine(&self, x11_session: &X11Session, context: &zmq::Context,  settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>) -> Result<Engine> {
         let engine_path = &settings.engine.path;
         let engine_log_path = &settings.engine.log_path;
@@ -99,15 +104,14 @@ impl EngineService {
         }
     }
 
-    /// Validates that a WebX Engine is running and responsive.
+    /// Validates that a WebX Engine is running and responsive by sending ping requests.
     ///
     /// # Arguments
-    /// * `engine` - The WebX Engine instance.
-    /// * `context` - The ZeroMQ context.
+    /// * `engine` - The mutable reference to the WebX Engine instance.
     /// * `tries` - The number of validation attempts.
     ///
     /// # Returns
-    /// A result indicating success or failure.
+    /// * `Result<()>` - Ok if the engine responds with "pong", Err otherwise.
     pub fn validate_engine(&self, engine: &mut Engine, mut tries: i32) -> Result<()> {
         // Verify session is running
         let mut connection_error = "".to_string();
@@ -136,10 +140,10 @@ impl EngineService {
     /// Keys are converted from camelCase to SNAKE_CASE and prefixed with "WEBX_ENGINE_".
     ///
     /// # Arguments
-    /// * `parameters` - HashMap containing the engine parameters
+    /// * `parameters` - HashMap containing the engine parameters.
     ///
     /// # Returns
-    /// A vector of tuples containing the environment variable name and value
+    /// * `Vec<(String, String)>` - A vector of tuples containing the environment variable name and value.
     fn convert_engine_parameters(&self, parameters: &HashMap<String, String>) -> Vec<(String, String)> {
         parameters
             .iter()

@@ -237,7 +237,6 @@ impl SessionProxy {
                 }
             }
 
-
         } else if message_parts[0] == "list" {
             // Debug output of all X11 sessions
             let all_x11_sessions = self.engine_session_manager.get_all_x11_sessions().map(|sessions| {
@@ -323,14 +322,13 @@ impl SessionProxy {
     ///
     /// # Arguments
     /// * `settings` - The application settings.
-    /// * `username` - The username of the user.
-    /// * `password` - The password of the user.
-    /// * `width` - The width of the session display.
-    /// * `height` - The height of the session display.
+    /// * `credentials` - The credentials for the user.
+    /// * `resolution` - The screen resolution for the session.
     /// * `keyboard` - The keyboard layout.
+    /// * `engine_parameters` - Additional engine parameters.
     ///
     /// # Returns
-    /// A string containing the session ID or an error message.
+    /// * `String` - The session creation result as a string (success or error code and message).
     fn get_or_create_session(&mut self, settings: &Settings, credentials: Credentials, resolution: ScreenResolution, keyboard: &str, engine_parameters: &HashMap<String, String>) -> String {
         match self.engine_session_manager.get_or_create_engine_session(settings, &credentials, resolution, keyboard, engine_parameters, &self.context) {
             Ok(session_id) => format!("{},{}", SessionCreationReturnCodes::Success.to_u32(), session_id),
@@ -354,7 +352,7 @@ impl SessionProxy {
     /// * `session_id` - The ID of the session to ping.
     ///
     /// # Returns
-    /// A string indicating the ping result.
+    /// * `String` - A string indicating the ping result ("pong" or "pang" with error).
     fn ping_engine(&mut self, session_id: &str) -> String {
         match self.engine_session_manager.ping_engine(session_id) {
             Ok(_) => format!("pong,{}", session_id),
@@ -371,7 +369,8 @@ impl SessionProxy {
     /// * `message_parts` - The parts of the command message.
     ///
     /// # Returns
-    /// A tuple containing the decoded parameters or an error.
+    /// * `Result<(String, String, u32, u32, String, HashMap<String, String>)>` - 
+    ///   Ok with a tuple of username, password, width, height, keyboard, and engine parameters if successful, Err otherwise.
     fn decode_create_command(&self, message_parts: &Vec<&str>) -> Result<(String, String, u32, u32, String, HashMap<String, String>)> {
         if message_parts.len() >= 6 {
             let username_base64 = message_parts[1];
@@ -411,7 +410,7 @@ impl SessionProxy {
     /// * `input` - The Base64-encoded string.
     ///
     /// # Returns
-    /// The decoded string.
+    /// * `Result<String>` - The decoded string if successful, Err otherwise.
     fn decode_base64(&self, input: &str) -> Result<String> {
         let decoded_bytes = STANDARD.decode(input)?;
 

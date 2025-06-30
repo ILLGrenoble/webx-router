@@ -44,6 +44,7 @@ impl EngineSession {
         self.last_activity = current_time;
     }
 
+    /// Retrieves the session secret.
     pub fn secret(&self) -> &str {
         &self.secret
     }

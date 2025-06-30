@@ -16,24 +16,23 @@ use std::process;
 enum Command {
     /// Creates a WebX Session for the current user
     Create {
-        /// Specified whether to run in daemon mode or not
+        /// Specifies whether to run in daemon mode or not
         #[structopt(short, long)]
         daemon: bool,
 
-        /// Specified the width of the screen
+        /// Specifies the width of the screen
         #[structopt(short, long)]
         width: u32,
 
-        /// Specified the height of the screen
+        /// Specifies the height of the screen
         #[structopt(short, long)]
         height: u32,
 
-        /// Specified the keyboard layout
+        /// Specifies the keyboard layout
         #[structopt(short, long, default_value = "gb")]
         keyboard_layout: String,
-
     },
-    /// List all sessions
+    /// Lists all sessions
     List,
 }
 
@@ -49,11 +48,21 @@ struct Opt {
     #[structopt(short, long)]
     verbose: bool,
 
+    /// The subcommand to execute
     #[structopt(subcommand)]
     command: Command,
 }
 
 /// Entry point of the WebX CLI application.
+///
+/// Parses command-line arguments, sets up logging, connects to the WebX Router,
+/// and executes the specified command.
+///
+/// # Arguments
+/// None
+///
+/// # Returns
+/// Nothing. Exits the process on error.
 fn main() {
     dotenv().ok();
 
@@ -93,7 +102,7 @@ fn main() {
                             error!("CreationError: {}", response.message);
                         },
                         SessionCreationReturnCodes::AuthenticationError => {
-                            error!("InvalidRequestPaAuthenticationErrorrameters: {}", response.message);
+                            error!("AuthenticationError: {}", response.message);
                         },
                     }
                 },
@@ -102,7 +111,6 @@ fn main() {
 
         }
         Command::List => {
-
             match cli.list() {
                 Ok(response) => {
                     info!("Current WebX sessions:\n{}", &response);
@@ -113,9 +121,15 @@ fn main() {
     }
 
     cli.disconnect();
-
 }
 
+/// Sets up logging for the CLI application.
+///
+/// # Arguments
+/// * `verbose` - If true, sets the logging level to Debug; otherwise, Info.
+///
+/// # Returns
+/// * `Result<(), fern::InitError>` - Ok if logging is set up successfully, Err otherwise.
 fn setup_logging(verbose: bool) -> Result<(), fern::InitError> {
     let logging_level = if verbose { log::LevelFilter::Debug } else { log::LevelFilter::Info };
 
@@ -130,4 +144,3 @@ fn setup_logging(verbose: bool) -> Result<(), fern::InitError> {
     base_config.apply()?;
     Ok(())
 }
-

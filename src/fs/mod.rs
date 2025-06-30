@@ -2,7 +2,6 @@ use std::ffi::CString;
 use std::fs;
 use std::fs::{OpenOptions, Permissions};
 use std::os::unix::fs::PermissionsExt;
-
 use std::path::Path;
 
 use crate::common::{Result, RouterError};
@@ -21,7 +20,7 @@ const OTHER_WRITE: u32 = 0o002;
 /// * `gid` - The group ID to set as the owner.
 ///
 /// # Returns
-/// A `Result` indicating success or an `RouterError` if the operation fails.
+/// A `Result` indicating success or a `RouterError` if the operation fails.
 pub fn chown(path: &str, uid: u32, gid: u32) -> Result<()> {
     let cpath =
         CString::new(path).map_err(|error| RouterError::SystemError(format!("{}", error)))?;
@@ -37,7 +36,7 @@ pub fn chown(path: &str, uid: u32, gid: u32) -> Result<()> {
 /// * `path` - The path to the directory to create.
 ///
 /// # Returns
-/// A `Result` indicating success or an `RouterError` if the operation fails.
+/// A `Result` indicating success or a `RouterError` if the operation fails.
 pub fn mkdir(path: &str) -> Result<()> {
     if fs::create_dir_all(path).is_err() {
         return Err(RouterError::SystemError(format!("Could create directory for path: {}", path)));
@@ -52,7 +51,7 @@ pub fn mkdir(path: &str) -> Result<()> {
 /// * `mode` - The permissions to set, in octal format (e.g., `0o755`).
 ///
 /// # Returns
-/// A `Result` indicating success or an `RouterError` if the operation fails.
+/// A `Result` indicating success or a `RouterError` if the operation fails.
 pub fn chmod(path: &str, mode: u32) -> Result<()> {
     let mode = Permissions::from_mode(mode);
     if fs::set_permissions(path, mode).is_err() {
@@ -67,7 +66,7 @@ pub fn chmod(path: &str, mode: u32) -> Result<()> {
 /// * `path` - The path to the file to create or update.
 ///
 /// # Returns
-/// A `Result` indicating success or an `RouterError` if the operation fails.
+/// A `Result` indicating success or a `RouterError` if the operation fails.
 pub fn touch(path: &str) -> Result<()> {
     if OpenOptions::new()
         .create_new(true)
@@ -81,10 +80,24 @@ pub fn touch(path: &str) -> Result<()> {
     Ok(())
 }
 
+/// Checks if a file exists at the specified path.
+///
+/// # Arguments
+/// * `path` - The path to the file to check.
+///
+/// # Returns
+/// * `bool` - `true` if the file exists, `false` otherwise.
 pub fn file_exists(path: &str) -> bool {
     Path::new(path).exists()
 }
 
+/// Retrieves the metadata for a file at the specified path, if it exists.
+///
+/// # Arguments
+/// * `path` - The path to the file.
+///
+/// # Returns
+/// * `Option<fs::Metadata>` - Some(metadata) if the file exists and metadata can be retrieved, None otherwise.
 pub fn file_params(path: &str) -> Option<fs::Metadata> {
     if file_exists(path) {
         match fs::metadata(Path::new(path)) {
@@ -94,13 +107,19 @@ pub fn file_params(path: &str) -> Option<fs::Metadata> {
                 None
             }
         }
-
     } else {
         warn!("Unable obtain metadata from file at {}: File doesn't exist", path);
         None
     }
 }
 
+/// Checks if the given mode grants permissions only to the user (no group or other permissions).
+///
+/// # Arguments
+/// * `mode` - The file mode (permission bits) to check.
+///
+/// # Returns
+/// * `bool` - `true` if only the user has permissions, `false` otherwise.
 pub fn user_only_permissions(mode: u32) -> bool {
     (mode & (GROUP_READ | GROUP_WRITE | OTHER_READ | OTHER_WRITE)) == 0
 }

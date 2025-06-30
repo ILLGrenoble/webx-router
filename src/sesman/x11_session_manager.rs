@@ -7,7 +7,7 @@ use crate::{
 
 use super::{XorgService, Account, X11Session, ScreenResolution};
 
-/// The `X11SessionManager` struct provides functionality for managing user sessions,
+/// The `X11SessionManager` struct provides functionality for managing user X11 sessions,
 /// including creating, retrieving, and terminating sessions.
 pub struct X11SessionManager {
     authenticator: Authenticator,
@@ -16,6 +16,9 @@ pub struct X11SessionManager {
 
 impl X11SessionManager {
     /// Creates a new `X11SessionManager` instance.
+    ///
+    /// # Arguments
+    /// * `settings` - The session manager settings.
     ///
     /// # Returns
     /// A new `X11SessionManager` instance.
@@ -33,7 +36,7 @@ impl X11SessionManager {
     /// * `resolution` - The screen resolution for the session.
     ///
     /// # Returns
-    /// A `Result` containing the created `Session` or an `ApplicationError`.
+    /// A `Result` containing the created `X11Session` or a `RouterError`.
     pub fn create_session(&self, credentials: &Credentials, resolution: ScreenResolution) -> Result<X11Session> {
         let environment = self.authenticator.authenticate(credentials)?;
         debug!("Successfully authenticated user: \"{}\"", &credentials.username());
@@ -61,10 +64,10 @@ impl X11SessionManager {
         Err(RouterError::AuthenticationError(format!("Could not find user \"{}\"", credentials.username())))
     }
 
-    /// Retrieves all active sessions.
+    /// Retrieves all active X11 sessions.
     ///
     /// # Returns
-    /// An `Option` containing a vector of `Session` instances, or `None` if no sessions are found.
+    /// An `Option` containing a vector of `X11Session` instances, or `None` if no sessions are found.
     pub fn get_all(&self) -> Option<Vec<X11Session>> {
         self.xorg_service.get_all_sessions()
     }
@@ -75,7 +78,7 @@ impl X11SessionManager {
     /// * `id` - The unique identifier of the session to terminate.
     ///
     /// # Returns
-    /// A `Result` indicating success or an `ApplicationError`.
+    /// A `Result` indicating success or a `RouterError`.
     pub fn kill_by_id(&self, id: &str) -> Result<()> {
         if let Some(session) = self.xorg_service.get_by_id(id) {
             // kill the processes
@@ -90,7 +93,7 @@ impl X11SessionManager {
     /// Terminates all active sessions.
     ///
     /// # Returns
-    /// A `Result` indicating success or an `ApplicationError`.
+    /// A `Result` indicating success or a `RouterError`.
     pub fn kill_all(&self) -> Result<()> {
         if let Some(sessions) = self.xorg_service.get_all_sessions() {
             for session in sessions {
@@ -104,6 +107,14 @@ impl X11SessionManager {
         Ok(())
     }
 
+    /// Terminates a specific session by killing its window manager and Xorg processes,
+    /// and removing it from the session list.
+    ///
+    /// # Arguments
+    /// * `session` - The session to terminate.
+    ///
+    /// # Returns
+    /// A `Result` indicating success or a `RouterError`.
     fn kill_session(&self, session: &X11Session) -> Result<()> {
         debug!("Killing window manager on display {} with pid: {}", session.display_id(), session.window_manager().pid());
         session.window_manager().kill()?;

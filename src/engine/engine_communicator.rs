@@ -12,6 +12,10 @@ impl EngineCommunicator {
     ///
     /// # Arguments
     /// * `context` - The ZeroMQ context used for communication.
+    /// * `path` - The IPC path to connect to the WebX Engine.
+    ///
+    /// # Returns
+    /// * `EngineCommunicator` - A new instance of the communicator.
     pub fn new(context: zmq::Context, path: String) -> Self {
         Self {
             context,
@@ -20,24 +24,30 @@ impl EngineCommunicator {
         }
     }
 
+    /// Closes the current request socket and disconnects from the engine.
+    ///
+    /// # Returns
+    /// Nothing.
     pub fn close(&mut self) {
         self.disconnect_req_socket();
         self.req_socket = None;
     }
 
+    /// Returns the IPC path this communicator is using.
+    ///
+    /// # Returns
+    /// * `&str` - The IPC path as a string slice.
     pub fn path(&self) -> &str {
         &self.path
     }
 
-    /// Creates a ZeeroMQ socket and sends a request to the WebX Engine and waits for a response.
-    /// After receiving the response, it disconnects the socket.
+    /// Sends a request to the WebX Engine and waits for a response.
     ///
     /// # Arguments
-    /// * `path` - The IPC path to connect to the engine.
-    /// * `request` - The request message to send.
+    /// * `request` - The request string to send to the engine.
     ///
     /// # Returns
-    /// * `Result<String>` - The response message or an error.
+    /// * `Result<String>` - The response from the engine, or an error if communication fails.
     pub fn send_request(&mut self, request: &str) -> Result<String> {
         let req_socket = match self.req_socket {
             Some(ref mut req_socket) => req_socket,
@@ -47,7 +57,7 @@ impl EngineCommunicator {
             }
         };
 
-        // Send requet message
+        // Send request message
         trace!("Sending WebX Engine request at {}", self.path);
         if let Err(error) = req_socket.send(request, 0) {
             error!("Failed to send request to {}: {}", self.path, error);
@@ -69,7 +79,6 @@ impl EngineCommunicator {
 
     /// Creates a ZeroMQ REQ socket and connects it to the specified path.
     ///
-    ///
     /// # Returns
     /// * `Result<zmq::Socket>` - The created and connected socket or an error.
     fn create_req_socket(&self) -> Result<zmq::Socket> {
@@ -87,10 +96,6 @@ impl EngineCommunicator {
     }
 
     /// Disconnects a ZeroMQ REQ socket from the specified path.
-    ///
-    /// # Arguments
-    /// * `socket` - The socket to disconnect.
-    /// * `path` - The IPC path to disconnect from.
     fn disconnect_req_socket(&self) {
         let address = format!("ipc://{}", self.path);
         if let Some(socket) = &self.req_socket {

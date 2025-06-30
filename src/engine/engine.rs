@@ -3,11 +3,13 @@ use super::EngineCommunicator;
 
 use std::fs;
 
-/// Represents an WebX Engine process and its inter-process communication (IPC) channel.
+/// Represents a WebX Engine process and its inter-process communication (IPC) channel.
 pub struct Engine {
     /// The child process running the WebX Engine.
     process: ProcessHandle,
+    /// The session ID associated with this engine.
     session_id: String,
+    /// The communicator used for IPC with the engine.
     communicator: EngineCommunicator,
 }
 
@@ -15,13 +17,13 @@ impl Engine {
     /// Creates a new `Engine` instance.
     ///
     /// # Arguments
-    ///
     /// * `process` - The child process running the WebX Engine.
-    /// * `ipc` - The IPC channel identifier.
+    /// * `session_id` - The session ID associated with this engine.
+    /// * `context` - The ZeroMQ context for communication.
+    /// * `ipc` - The IPC channel identifier (path).
     ///
     /// # Returns
-    ///
-    /// A new instance of `Engine`.
+    /// * `Engine` - A new instance of `Engine`.
     pub fn new(process: ProcessHandle, session_id: &str, context: zmq::Context, ipc: String) -> Self {
         Self {
             process,
@@ -30,27 +32,37 @@ impl Engine {
         }
     }
 
+    /// Returns the session ID associated with this engine.
+    ///
+    /// # Returns
+    /// * `&str` - The session ID.
     pub fn get_session_id(&self) -> &str {
         return &self.session_id;
     }
 
-    /// Sends a request to a WebX Engine and retrieves the response.
+    /// Sends a request to the WebX Engine and retrieves the response.
     ///
     /// # Arguments
-    /// * `session_id` - The ID of the session.
-    /// * `context` - The ZeroMQ context.
     /// * `request` - The request string to send.
     ///
     /// # Returns
-    /// The response from the session.
+    /// * `Result<String>` - The response from the engine, or an error if communication fails.
     pub fn send_request(&mut self, request: &str) -> Result<String> {
         self.communicator.send_request(request)
     }
 
+    /// Checks if the engine process is still running.
+    ///
+    /// # Returns
+    /// * `Option<bool>` - Some(true) if running, Some(false) if not, or None if status cannot be determined.
     pub fn is_running(&self) -> Option<bool> {
         self.process.is_running()
     }
 
+    /// Closes the engine process and its IPC channel, and removes the IPC socket file.
+    ///
+    /// # Returns
+    /// * `Result<()>` - Ok if the engine was closed successfully, Err otherwise.
     pub fn close(&mut self) -> Result<()> {
         // Close the IPC channel
         self.communicator.close();
@@ -68,5 +80,4 @@ impl Engine {
         
         Ok(())
     }
-
 }
