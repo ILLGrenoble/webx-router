@@ -58,8 +58,8 @@ impl InstructionProxy {
                 if items[1].is_readable() && self.is_running {
                     match self.forward_relay_instruction(&relay_sub_socket, &engine_pub_socket) {
                         // Send session id on inproc message queue, to be used by session_proxy
-                        Some(session_id) => {
-                            let session_message = format!("{}:{}", INPROC_SESSION_TOPIC, session_id);
+                        Some(secret) => {
+                            let session_message = format!("{}:{}", INPROC_SESSION_TOPIC, secret);
                             event_bus_pub_socket.send(&session_message, 0).unwrap();
                         },
                         None => {}
@@ -160,10 +160,10 @@ impl InstructionProxy {
     /// * `engine_pub_socket` - The ZeroMQ socket publishing instructions to the engine.
     ///
     /// # Returns
-    /// * `Option<String>` - The session ID if available.
+    /// * `Option<String>` - The session secret if available.
     fn forward_relay_instruction(&self, relay_sub_socket: &zmq::Socket, engine_pub_socket: &zmq::Socket) -> Option<String> {
         let mut msg = zmq::Message::new();
-        let mut session_id_option = None;
+        let mut secret_option = None;
 
         // Get message from relay publisher
         if let Err(error) = relay_sub_socket.recv(&mut msg, 0) {
@@ -172,10 +172,10 @@ impl InstructionProxy {
         } else {
             trace!("Got instruction from relay of length {}", msg.len());
 
-            // Get session_id from the msg
-            let raw_session_id = msg.deref();
-            let session_id = hex::encode(&raw_session_id[0 .. 16]);
-            session_id_option = Some(session_id);
+            // Get secret from the msg
+            let raw_secret = msg.deref();
+            let secret = hex::encode(&raw_secret[0 .. 16]);
+            secret_option = Some(secret);
 
             // Resend message on engine pub socket
             if let Err(error) = engine_pub_socket.send(msg, 0) {
@@ -183,6 +183,6 @@ impl InstructionProxy {
             }   
         }
 
-        session_id_option
+        secret_option
     }
 }

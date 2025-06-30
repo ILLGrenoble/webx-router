@@ -1,5 +1,5 @@
 use super::Engine;
-use crate::common::{System, random_string};
+use crate::common::{System};
 use crate::sesman::X11Session;
 
 /// The `EngineSession` struct represents a user session, including its X11 session and WebX Engine.
@@ -14,11 +14,12 @@ impl EngineSession {
     /// Creates a new `EngineSession` instance.
     ///
     /// # Arguments
+    /// * `secret` - The session secret (this is the session_id inside the webx-engine)
     /// * `x11_session` - The X11 session details.
     /// * `engine` - The WebX Engine instance.
-    pub fn new(x11_session: X11Session, engine: Engine) -> Self {
+    pub fn new(secret: String, x11_session: X11Session, engine: Engine) -> Self {
         Self {
-            secret: random_string(32),
+            secret,
             x11_session,
             engine,
             last_activity: System::current_time_s()
@@ -40,7 +41,6 @@ impl EngineSession {
     /// Updates the activity timestamp of the session.
     pub fn update_activity(&mut self) {
         let current_time = System::current_time_s();
-        trace!("Updating activity of session {} to {}", self.id(), current_time);
         self.last_activity = current_time;
     }
 

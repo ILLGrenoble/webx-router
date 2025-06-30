@@ -151,8 +151,8 @@ impl SessionProxy {
             } else if event.starts_with(INPROC_SESSION_TOPIC) {
                 let message_text = msg.as_str().unwrap();
                 let message_parts = message_text.split(':').collect::<Vec<&str>>();
-                let session_id = message_parts[1];
-                self.engine_session_manager.update_engine_session_activity(&session_id);
+                let secret = message_parts[1];
+                self.engine_session_manager.update_engine_session_activity(&secret);
 
             } else {
                 warn!("Got unknown event bus command: {}", event);
@@ -190,11 +190,10 @@ impl SessionProxy {
                 }
 
             } else {
-                let session_id = message_parts[1];
-                trace!("Got ping for engine {}", session_id);
+                let secret = message_parts[1];
 
                 // Ping the session and get a string response
-                let ping_response = self.ping_engine(&session_id);
+                let ping_response = self.ping_engine(&secret);
                 if let Err(error) = secure_rep_socket.send(ping_response.as_str(), 0) {
                     error!("Failed to send session ping message: {}", error);
                 }
@@ -263,11 +262,10 @@ impl SessionProxy {
                 error!("Received invalid connect command");
 
             } else {
-                let session_id = message_parts[1];
-                info!("Got connect for session \"{}\"", session_id);
+                let secret = message_parts[1];
 
                 // Forward the connection request
-                match self.engine_session_manager.send_engine_request(&session_id, &message_text) {
+                match self.engine_session_manager.send_engine_request(&secret, &message_text) {
                     Ok(response) => {
                         if let Err(error) = secure_rep_socket.send(response.as_str(), 0) {
                             error!("Failed to send client connection response: {}", error);
@@ -287,12 +285,10 @@ impl SessionProxy {
                 error!("Received invalid disconnect command");
 
             } else {
-                let session_id = message_parts[1];
-                let client_id = message_parts[2];
-                info!("Got disconnect from client \"{}\" for session \"{}\"", client_id, session_id);
+                let secret = message_parts[1];
 
                 // Forward the disconnection request
-                match self.engine_session_manager.send_engine_request(&session_id, &message_text) {
+                match self.engine_session_manager.send_engine_request(&secret, &message_text) {
                     Ok(response) => {
                         if let Err(error) = secure_rep_socket.send(response.as_str(), 0) {
                             error!("Failed to send client disconnection response: {}", error);
@@ -331,7 +327,7 @@ impl SessionProxy {
     /// * `String` - The session creation result as a string (success or error code and message).
     fn get_or_create_session(&mut self, settings: &Settings, credentials: Credentials, resolution: ScreenResolution, keyboard: &str, engine_parameters: &HashMap<String, String>) -> String {
         match self.engine_session_manager.get_or_create_engine_session(settings, &credentials, resolution, keyboard, engine_parameters, &self.context) {
-            Ok(session_id) => format!("{},{}", SessionCreationReturnCodes::Success.to_u32(), session_id),
+            Ok(secret) => format!("{},{}", SessionCreationReturnCodes::Success.to_u32(), secret),
             Err(error) => {
                 error!("Failed to create session for user {}: {}", credentials.username(), error);
                 match error {
@@ -349,16 +345,15 @@ impl SessionProxy {
     /// Pings a session to check if it is active.
     ///
     /// # Arguments
-    /// * `session_id` - The ID of the session to ping.
+    /// * `secret` - The secret of the session to ping.
     ///
     /// # Returns
     /// * `String` - A string indicating the ping result ("pong" or "pang" with error).
-    fn ping_engine(&mut self, session_id: &str) -> String {
-        match self.engine_session_manager.ping_engine(session_id) {
-            Ok(_) => format!("pong,{}", session_id),
+    fn ping_engine(&mut self, secret: &str) -> String {
+        match self.engine_session_manager.ping_engine(secret) {
+            Ok(_) => format!("pong,{}", secret),
             Err(error) => {
-                error!("Failed to ping session with id {}: {}", session_id, error);
-                format!("pang,{},{}", session_id, error)
+                format!("pang,{},{}", secret, error)
             }
         }
     }

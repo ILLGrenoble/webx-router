@@ -10,6 +10,7 @@ use std::{
     sync::Mutex,
     collections::HashMap,
 };
+use uuid::Uuid;
 
 /// The `EngineSessionManager` manages user WebX sessions, including creating, stopping,
 /// and validating sessions. It interacts with the WebX Session Manager and the WebX Engine.
@@ -86,7 +87,7 @@ impl EngineSessionManager {
                 session.display_id() == x11_session.display_id()) {
 
                 debug!("Found existing Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", session.username(), session.display_id(), session.id());
-                return Ok(session.id().to_string());
+                return Ok(session.secret().to_string());
             }
 
             // Remove existing sessions for the user
@@ -108,7 +109,7 @@ impl EngineSessionManager {
         if let Ok(sessions) = self.sessions.lock() {
             // Return the newly created session
             match sessions.iter().find(|session| session.username() == credentials.username()) {
-                Some(session) => Ok(session.id().to_string()),
+                Some(session) => Ok(session.secret().to_string()),
                 None => Err(RouterError::EngineSessionError(format!("Could not retrieve Engine Session for user \"{}\"", credentials.username())))
             }
         } else {
@@ -119,14 +120,14 @@ impl EngineSessionManager {
     /// Pings a WebX Engine to check if it is active.
     ///
     /// # Arguments
-    /// * `session_id` - The ID of the session to ping.
+    /// * `secret` - The secret of the session to ping.
     ///
     /// # Returns
     /// * `Result<()>` - Ok if the engine is active, Err otherwise.
-    pub fn ping_engine(&mut self, session_id: &str) -> Result<()> {
+    pub fn ping_engine(&mut self, secret: &str) -> Result<()> {
         if let Ok(mut sessions) = self.sessions.lock() {
-            let (index, session) = sessions.iter_mut().enumerate().find(|(_, session)| session.id() == session_id)
-                .ok_or_else(|| RouterError::EngineSessionError(format!("Could not retrieve Engine Session with id \"{}\"", session_id)))?;
+            let (index, session) = sessions.iter_mut().enumerate().find(|(_, session)| session.secret() == secret)
+                .ok_or_else(|| RouterError::EngineSessionError(format!("Could not retrieve Engine Session by provided secret")))?;
 
             match self.engine_service.validate_engine(session.engine_mut(), 1) {
                 Ok(_) => Ok(()),
@@ -148,15 +149,15 @@ impl EngineSessionManager {
     /// Sends a request to a WebX Engine and retrieves the response.
     ///
     /// # Arguments
-    /// * `session_id` - The ID of the session.
+    /// * `secret` - The secret of the session.
     /// * `request` - The request string to send.
     ///
     /// # Returns
     /// * `Result<String>` - The response from the session, or an error.
-    pub fn send_engine_request(&mut self, session_id: &str, request: &str) -> Result<String> {
+    pub fn send_engine_request(&mut self, secret: &str, request: &str) -> Result<String> {
         if let Ok(mut sessions) = self.sessions.lock() {
-            let session = sessions.iter_mut().find(|session| session.id() == session_id)
-                .ok_or_else(|| RouterError::EngineSessionError(format!("Could not retrieve Engine Session with id \"{}\"", session_id)))?;
+            let session = sessions.iter_mut().find(|session| session.secret() == secret)
+                .ok_or_else(|| RouterError::EngineSessionError(format!("Could not retrieve Engine Session with provided secret")))?;
 
             self.engine_service.send_engine_request(session.engine_mut(), request)
 
@@ -168,10 +169,10 @@ impl EngineSessionManager {
     /// Updates the activity timestamp of a session.
     ///
     /// # Arguments
-    /// * `session_id` - The ID of the session to update.
-    pub fn update_engine_session_activity(&mut self, session_id: &str) {
+    /// * `secret` - The secret of the session to update.
+    pub fn update_engine_session_activity(&mut self, secret: &str) {
         if let Ok(mut sessions) = self.sessions.lock() {
-            if let Some(session) = sessions.iter_mut().find(|session| session.id() == session_id) {
+            if let Some(session) = sessions.iter_mut().find(|session| session.secret() == secret) {
                 session.update_activity();
             }
         }
@@ -224,10 +225,12 @@ impl EngineSessionManager {
     fn create_engine_session(&mut self, x11_session: X11Session, settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>, context: &zmq::Context) -> Result<()> {
         debug!("Creating Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", &x11_session.account().username(), &x11_session.display_id(), x11_session.id());
 
-        // Spawn a new WebX Engine
-        if let Some(engine) = self.multi_try_spawn_engine(&x11_session, context, settings, keyboard, engine_parameters, 3) {
+        let secret = Uuid::new_v4().simple().to_string();
 
-            let mut session = EngineSession::new(x11_session, engine);
+        // Spawn a new WebX Engine
+        if let Some(engine) = self.multi_try_spawn_engine(&x11_session, &secret, context, settings, keyboard, engine_parameters, 3) {
+
+            let mut session = EngineSession::new(secret, x11_session, engine);
 
             // Validate that the engine is running
             if let Err(error) = self.engine_service.validate_engine(session.engine_mut(), 3) {
@@ -261,11 +264,11 @@ impl EngineSessionManager {
     ///
     /// # Returns
     /// * `Option<Engine>` - Some(Engine) if successful, None otherwise.
-    fn multi_try_spawn_engine(&self, x11_session: &X11Session, context: &zmq::Context,  settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>, tries: u64) -> Option<Engine> {
+    fn multi_try_spawn_engine(&self, x11_session: &X11Session, secret: &str, context: &zmq::Context,  settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>, tries: u64) -> Option<Engine> {
         let mut attempt = 1;
         while attempt <= tries {
             debug!("Starting WebX Engine for user \"{}\" with session id \"{}\" on display \"{}\" (attempt {} / {})", x11_session.account().username(), x11_session.id(), x11_session.display_id(), attempt, tries);
-            match self.engine_service.spawn_engine(&x11_session, context, settings, keyboard, engine_parameters) {
+            match self.engine_service.spawn_engine(x11_session, secret, context, settings, keyboard, engine_parameters) {
                 Ok(engine) => {
                     thread::sleep(time::Duration::from_millis(attempt * 1000));
 

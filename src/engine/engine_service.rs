@@ -47,6 +47,7 @@ impl EngineService {
     ///
     /// # Arguments
     /// * `x11_session` - The X11 session details.
+    /// * `secret` - The secret used as a webx-engine session_id
     /// * `context` - The ZeroMQ context.
     /// * `settings` - The application settings.
     /// * `keyboard` - The keyboard layout.
@@ -54,7 +55,7 @@ impl EngineService {
     ///
     /// # Returns
     /// * `Result<Engine>` - The spawned WebX Engine instance, or an error if spawning fails.
-    pub fn spawn_engine(&self, x11_session: &X11Session, context: &zmq::Context,  settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>) -> Result<Engine> {
+    pub fn spawn_engine(&self, x11_session: &X11Session, secret: &str, context: &zmq::Context,  settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>) -> Result<Engine> {
         let engine_path = &settings.engine.path;
         let engine_log_path = &settings.engine.log_path;
         let message_proxy_path = &settings.transport.ipc.message_proxy;
@@ -90,13 +91,13 @@ impl EngineService {
             .env("WEBX_ENGINE_IPC_SESSION_CONNECTOR_PATH", &session_connector_path)
             .env("WEBX_ENGINE_IPC_MESSAGE_PROXY_PATH", message_proxy_path)
             .env("WEBX_ENGINE_IPC_INSTRUCTION_PROXY_PATH", instruction_proxy_path)
-            .env("WEBX_ENGINE_SESSION_ID", x11_session.id())
             .uid(webx_user.uid.as_raw())
             .gid(webx_user.gid.as_raw());
 
-        debug!("Launching WebX Engine \"{}\" on display {}", engine_path, x11_session.display_id());
-
         debug!("Spawning command: {}", format!("{:?}", command).replace("\"", ""));
+
+        // add secret env var
+        command.env("WEBX_ENGINE_SESSION_ID", secret);
 
         match ProcessHandle::new(&mut command) {
             Err(error) => Err(RouterError::EngineSessionError(format!("Failed to spawn WebX Engine: {}", error))),
@@ -123,7 +124,6 @@ impl EngineService {
                         return Err(RouterError::EngineSessionError(format!("Received non-pong message from ping: {}", message)));
                     }
             
-                    trace!("Received pong response from WebX Engine with session id {}", engine.get_session_id());
                     return Ok(());
                 },
                 Err(error) => {
