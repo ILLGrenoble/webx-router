@@ -81,6 +81,7 @@ fn main() {
         std::process::exit(1);
     }
     
+    let mut exit_code = 0;
     match opt.command {
         Command::Create {daemon, width, height, keyboard_layout} => {
             match cli.create(width, height, &keyboard_layout) {
@@ -92,21 +93,28 @@ fn main() {
                             if !daemon {
                                 if let Err(error) = cli.wait_for_interrupt(&session_id) {
                                     error!("Failed to wait for WebX Engine process: {}", error);
+                                    exit_code = 1;
                                 }
                             }
                         },
                         SessionCreationReturnCodes::InvalidRequestParameters => {
                             error!("InvalidRequestParameters: {}", response.message);
+                            exit_code = 1;
                         },
                         SessionCreationReturnCodes::CreationError => {
                             error!("CreationError: {}", response.message);
+                            exit_code = 1;
                         },
                         SessionCreationReturnCodes::AuthenticationError => {
                             error!("AuthenticationError: {}", response.message);
+                            exit_code = 1;
                         },
                     }
                 },
-                Err(error) => error!("Create command failed: {}", error)
+                Err(error) => {
+                    error!("Create command failed: {}", error);
+                    exit_code = 1;
+                }
             }
 
         }
@@ -121,6 +129,8 @@ fn main() {
     }
 
     cli.disconnect();
+
+    std::process::exit(exit_code);
 }
 
 /// Sets up logging for the CLI application.
