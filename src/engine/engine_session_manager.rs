@@ -86,7 +86,7 @@ impl EngineSessionManager {
                 session.id() == x11_session.id() && 
                 session.display_id() == x11_session.display_id()) {
 
-                debug!("Found existing Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", session.username(), session.display_id(), session.id());
+                info!("Found existing Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", session.username(), session.display_id(), session.id());
                 return Ok(session.secret().to_string());
             }
 
@@ -166,51 +166,6 @@ impl EngineSessionManager {
         }
     }
 
-    /// Updates the activity timestamp of a session.
-    ///
-    /// # Arguments
-    /// * `secret` - The secret of the session to update.
-    pub fn update_engine_session_activity(&mut self, secret: &str) {
-        if let Ok(mut sessions) = self.sessions.lock() {
-            if let Some(session) = sessions.iter_mut().find(|session| session.secret() == secret) {
-                session.update_activity();
-            }
-        }
-    }
-
-    /// Cleans up inactive sessions based on the inactivity timeout in the settings.
-    ///
-    /// # Arguments
-    /// * `settings` - The application settings.
-    pub fn cleanup_inactive_engine_sessions(&mut self, settings: &Settings) {
-        if settings.sesman.auto_logout_s > 0 {
-            if let Ok(mut sessions) = self.sessions.lock() {
-                let to_remove: Vec<usize> = sessions.iter_mut().enumerate()
-                    .filter(|(_, session)| !session.is_active(settings.sesman.auto_logout_s))
-                    .map(|(index, session)| {
-                        info!("Removing inactive Engine Session with id \"{}\" for user \"{}\" on display \"{}\"", session.id(), &session.username(), session.display_id());
-            
-                        // stop the engine session (if possible)
-                        session.stop_engine();
-            
-                        // Close X11 session
-                        if let Err(error) = self.x11_session_manager.kill_by_id(session.id()) {
-                            error!("Could not logout x11 session: {}", error);
-                        }
-
-                        index
-                    })
-                    .collect();
-
-                // Remove sessions in reverse order to avoid shifting indices
-                for index in to_remove.into_iter().rev() {
-                    sessions.remove(index);
-                }
-
-            }
-        }
-    }
-
     /// Creates a new session for a user. This spawns a new WebX Engine process if necessary.
     ///
     /// # Arguments
@@ -223,7 +178,7 @@ impl EngineSessionManager {
     /// # Returns
     /// A result indicating success or failure.
     fn create_engine_session(&mut self, x11_session: X11Session, settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>, context: &zmq::Context) -> Result<()> {
-        debug!("Creating Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", &x11_session.account().username(), &x11_session.display_id(), x11_session.id());
+        info!("Creating Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", &x11_session.account().username(), &x11_session.display_id(), x11_session.id());
 
         let secret = Uuid::new_v4().simple().to_string();
 
@@ -265,12 +220,12 @@ impl EngineSessionManager {
     /// # Returns
     /// * `Option<Engine>` - Some(Engine) if successful, None otherwise.
     fn multi_try_spawn_engine(&self, x11_session: &X11Session, secret: &str, context: &zmq::Context,  settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>, tries: u64) -> Option<Engine> {
-        let mut attempt = 1;
-        while attempt <= tries {
-            debug!("Starting WebX Engine for user \"{}\" with session id \"{}\" on display \"{}\" (attempt {} / {})", x11_session.account().username(), x11_session.id(), x11_session.display_id(), attempt, tries);
+        let mut attempt = 0;
+        while attempt < tries {
+            debug!("Starting WebX Engine for user \"{}\" with session id \"{}\" on display \"{}\" (attempt {} / {})", x11_session.account().username(), x11_session.id(), x11_session.display_id(), attempt + 1, tries);
             match self.engine_service.spawn_engine(x11_session, secret, context, settings, keyboard, engine_parameters) {
                 Ok(engine) => {
-                    thread::sleep(time::Duration::from_millis(attempt * 1000));
+                    thread::sleep(time::Duration::from_millis(attempt * 2000));
 
                     if engine.is_running().unwrap_or(true) {
                         debug!("WebX Engine running for user \"{}\" with session id \"{}\" on display \"{}\"", x11_session.account().username(), x11_session.id(), x11_session.display_id());

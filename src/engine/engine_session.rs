@@ -1,5 +1,4 @@
 use super::Engine;
-use crate::common::{System};
 use crate::sesman::X11Session;
 
 /// The `EngineSession` struct represents a user session, including its X11 session and WebX Engine.
@@ -7,7 +6,6 @@ pub struct EngineSession {
     secret: String,
     x11_session: X11Session,
     engine: Engine,
-    last_activity: u64,
 }
 
 impl EngineSession {
@@ -22,26 +20,7 @@ impl EngineSession {
             secret,
             x11_session,
             engine,
-            last_activity: System::current_time_s()
         }
-    }
-
-    /// Checks if the session is active based on the inactivity timeout.
-    ///
-    /// # Arguments
-    /// * `session_inactivity_s` - The inactivity timeout in seconds.
-    ///
-    /// # Returns
-    /// `true` if the session is active, `false` otherwise.
-    pub fn is_active(&self, session_inactivity_s: u64) -> bool {
-        let current_time = System::current_time_s();
-        current_time - self.last_activity <= session_inactivity_s
-    }
-
-    /// Updates the activity timestamp of the session.
-    pub fn update_activity(&mut self) {
-        let current_time = System::current_time_s();
-        self.last_activity = current_time;
     }
 
     /// Retrieves the session secret.

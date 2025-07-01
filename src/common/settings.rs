@@ -75,8 +75,6 @@ pub struct AuthenticationSettings {
 /// The `SesManSettings` struct represents the session manager configuration.
 #[derive(Debug, Deserialize, Clone)]
 pub struct SesManSettings {
-    /// The auto-logout timeout in seconds.
-    pub auto_logout_s: u64,
     pub authentication: AuthenticationSettings,
     pub xorg: XorgSettings,
 }

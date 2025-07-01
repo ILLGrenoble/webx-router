@@ -21,7 +21,6 @@ transport:
     private: ""
 
 sesman:
-  auto_logout_s: 0
   authentication:
     # the pam service to use for authenticating
     service: webx

@@ -90,9 +90,6 @@ impl SessionProxy {
                 if items[1].is_readable() && self.is_running {
                     self.handle_secure_request(&secure_rep_socket, settings);
                 }
-
-                // Cleanup inactive sessions
-                self.engine_session_manager.cleanup_inactive_engine_sessions(settings);
             }
         }
 
@@ -147,12 +144,6 @@ impl SessionProxy {
 
                 // Close all sessions gracefully
                 self.engine_session_manager.shutdown();
-
-            } else if event.starts_with(INPROC_SESSION_TOPIC) {
-                let message_text = msg.as_str().unwrap();
-                let message_parts = message_text.split(':').collect::<Vec<&str>>();
-                let secret = message_parts[1];
-                self.engine_session_manager.update_engine_session_activity(&secret);
 
             } else {
                 warn!("Got unknown event bus command: {}", event);

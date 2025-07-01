@@ -1,8 +1,6 @@
 use crate::common::*;
 use crate::fs;
 use std::process;
-use std::ops::Deref;
-use hex;
 
 /// Handles the forwarding of instructions from the relay to the engines.
 pub struct InstructionProxy {
@@ -38,8 +36,6 @@ impl InstructionProxy {
 
         let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC])?;
 
-        let event_bus_pub_socket = EventBus::create_event_publisher(&self.context)?;
-
         let mut items = [
             event_bus_sub_socket.as_poll_item(zmq::POLLIN),
             relay_sub_socket.as_poll_item(zmq::POLLIN),
@@ -56,14 +52,7 @@ impl InstructionProxy {
 
                 // Check for relay PUB messages (if running)
                 if items[1].is_readable() && self.is_running {
-                    match self.forward_relay_instruction(&relay_sub_socket, &engine_pub_socket) {
-                        // Send session id on inproc message queue, to be used by session_proxy
-                        Some(secret) => {
-                            let session_message = format!("{}:{}", INPROC_SESSION_TOPIC, secret);
-                            event_bus_pub_socket.send(&session_message, 0).unwrap();
-                        },
-                        None => {}
-                    }
+                    self.forward_relay_instruction(&relay_sub_socket, &engine_pub_socket);
                 }
             }
         }
@@ -153,36 +142,23 @@ impl InstructionProxy {
         }
     }
 
-    /// Forwards relay instructions to the engines and extracts session ID (to update usage times for the session).
+    /// Forwards relay instructions to the engines.
     ///
     /// # Arguments
     /// * `relay_sub_socket` - The ZeroMQ socket receiving relay instructions.
     /// * `engine_pub_socket` - The ZeroMQ socket publishing instructions to the engine.
-    ///
-    /// # Returns
-    /// * `Option<String>` - The session secret if available.
-    fn forward_relay_instruction(&self, relay_sub_socket: &zmq::Socket, engine_pub_socket: &zmq::Socket) -> Option<String> {
+    fn forward_relay_instruction(&self, relay_sub_socket: &zmq::Socket, engine_pub_socket: &zmq::Socket) {
         let mut msg = zmq::Message::new();
-        let mut secret_option = None;
 
         // Get message from relay publisher
         if let Err(error) = relay_sub_socket.recv(&mut msg, 0) {
             error!("Failed to received instruction from relay publisher: {}", error);
 
         } else {
-            trace!("Got instruction from relay of length {}", msg.len());
-
-            // Get secret from the msg
-            let raw_secret = msg.deref();
-            let secret = hex::encode(&raw_secret[0 .. 16]);
-            secret_option = Some(secret);
-
             // Resend message on engine pub socket
             if let Err(error) = engine_pub_socket.send(msg, 0) {
                 error!("Failed to send instruction to engine subscribers: {}", error);
             }   
         }
-
-        secret_option
     }
 }
