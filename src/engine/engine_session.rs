@@ -53,7 +53,7 @@ impl EngineSession {
         debug!("Stopping WebX Engine for \"{}\" on display \"{}\" with id \"{}\"", self.username(), self.display_id(), self.id());
         match self.engine.close() {
             Ok(_) => {
-                debug!("Stopped WebX Engine for \"{}\" on display \"{}\" with id \"{}\"", self.username(), self.display_id(), self.id());
+                info!("Stopped WebX Engine for \"{}\" on display \"{}\" with id \"{}\"", self.username(), self.display_id(), self.id());
             },
             Err(error) => error!("Failed to stop WebX Engine for \"{}\": {}", self.username(), error),
         }

@@ -1268,6 +1268,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shared_child",
+ "signal-hook",
  "structopt",
  "users",
  "uuid",

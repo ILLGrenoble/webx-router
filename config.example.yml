@@ -16,9 +16,6 @@ transport:
     message_proxy: "/tmp/webx-router-message-proxy.ipc"
     instruction_proxy: "/tmp/webx-router-instruction-proxy.ipc"
     engine_connector_root: "/tmp/webx-engine-session-connector"
-  encryption:
-    public: ""
-    private: ""
 
 sesman:
   authentication:

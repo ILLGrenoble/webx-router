@@ -15,14 +15,6 @@ pub struct PortSettings {
     pub session: u32,
 }
 
-/// The `EncryptionSettings` struct represents the encryption configuration.
-#[derive(Debug, Deserialize, Clone)]
-pub struct EncryptionSettings {
-    /// The public key for encryption.
-    pub public: String,
-    /// The private key for encryption.
-    pub private: String,
-}
 
 /// The `IPCSettings` struct represents the inter-process communication configuration.
 #[derive(Debug, Deserialize, Clone)]
@@ -42,8 +34,6 @@ pub struct TransportSettings {
     pub ports: PortSettings,
     /// The IPC settings for inter-process communication.
     pub ipc: IPCSettings,
-    /// The encryption settings for secure communication.
-    pub encryption: EncryptionSettings,
 }
 
 /// The `EngineSettings` struct represents the WebX Engine configuration.

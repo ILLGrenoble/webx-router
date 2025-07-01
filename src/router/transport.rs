@@ -1,11 +1,11 @@
 use crate::router::{MessageProxy, InstructionProxy, ClientConnector, SessionProxy};
-use crate::common::*;
-
+use crate::common::{Settings, Result};
 use std::thread;
 
 /// Manages the transport layer of the WebX Router, including proxies and connectors.
 pub struct Transport {
     context: zmq::Context,
+    settings: Settings,
 }
 
 impl Transport {
@@ -13,9 +13,10 @@ impl Transport {
     ///
     /// # Arguments
     /// * `context` - The ZeroMQ context used for communication.
-    pub fn new(context: zmq::Context) -> Self {
+    pub fn new(context: zmq::Context, settings: Settings) -> Self {
         Self {
             context,
+            settings,
         }
     }
 
@@ -26,31 +27,23 @@ impl Transport {
     ///
     /// # Returns
     /// * `Result<()>` - Indicates success or failure of the operation.
-    pub fn run(&self, settings: &mut Settings) -> Result<()> {
-        let transport = &mut settings.transport;
-
-        // Check for public/private keys in settings
-        if transport.encryption.private.is_empty() || transport.encryption.public.is_empty() {
-            let server_pair = zmq::CurveKeyPair::new()?;
-            let public_key_string = zmq::z85_encode(&server_pair.public_key).unwrap();
-            let secret_key_string = zmq::z85_encode(&server_pair.secret_key).unwrap();
-
-            info!("Encyption keys not set in application config: generating new ones");
-            transport.encryption.public = public_key_string;
-            transport.encryption.private = secret_key_string;
-        }
+    pub fn run(&mut self) -> Result<()> {
+        // Generate encryption keys
+        let server_pair = zmq::CurveKeyPair::new()?;
+        let public_key = zmq::z85_encode(&server_pair.public_key).unwrap();
+        let secret_key = zmq::z85_encode(&server_pair.secret_key).unwrap();
 
         // Create and run the engine message proxy in separate thread
-        let engine_message_proxy_thread = self.create_engine_message_proxy_thread(self.context.clone(), settings);
+        let engine_message_proxy_thread = self.create_engine_message_proxy_thread(self.context.clone(), &self.settings);
 
         // Create and run the relay instruction proxy in separate thread
-        let relay_instruction_proxy_thread = self.create_relay_instruction_proxy_thread(self.context.clone(), settings);
+        let relay_instruction_proxy_thread = self.create_relay_instruction_proxy_thread(self.context.clone(), &self.settings);
 
         // Create and run the session proxy in separate thread
-        let session_proxy_thread = self.create_session_proxy_thread(self.context.clone(), settings);
+        let session_proxy_thread = self.create_session_proxy_thread(self.context.clone(), &self.settings, &secret_key);
 
         // Create and run the Client Connector in the current thread (blocking)
-        if let Err(error) = ClientConnector::new(self.context.clone()).run(settings) {
+        if let Err(error) = ClientConnector::new(self.context.clone()).run(&self.settings, &public_key) {
             error!("Error while running Client Connector: {}", error);
         }
 
@@ -110,11 +103,12 @@ impl Transport {
     ///
     /// # Returns
     /// * `thread::JoinHandle<()>` - Handle to the spawned thread.
-    fn create_session_proxy_thread(&self, context: zmq::Context, settings: &Settings) -> thread::JoinHandle<()> {
+    fn create_session_proxy_thread(&self, context: zmq::Context, settings: &Settings, secret_key: &str) -> thread::JoinHandle<()> {
         thread::spawn({
             let settings = settings.clone();
+            let secret_key = secret_key.to_string();
             move || {
-            if let Err(error) = SessionProxy::new(context, &settings.sesman).run(&settings) {
+            if let Err(error) = SessionProxy::new(context, &settings.sesman).run(&settings, &secret_key) {
                 error!("Session Proxy thread error: {}", error);
             }
         }})

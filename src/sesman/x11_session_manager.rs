@@ -39,7 +39,7 @@ impl X11SessionManager {
     /// A `Result` containing the created `X11Session` or a `RouterError`.
     pub fn create_session(&self, credentials: &Credentials, resolution: ScreenResolution) -> Result<X11Session> {
         let environment = self.authenticator.authenticate(credentials)?;
-        debug!("Successfully authenticated user: \"{}\"", &credentials.username());
+        info!("Successfully authenticated user: \"{}\"", &credentials.username());
         
         if let Ok(Some(user)) = User::from_name(credentials.username()) {
             if let Some(account) = Account::from_user(user) {
@@ -123,6 +123,8 @@ impl X11SessionManager {
         session.xorg().kill()?;
 
         self.xorg_service.remove_session(session);
+
+        info!("Stopped Xorg and Window Manager processes on display \"{}\" with id \"{}\"", session.display_id(), session.id());
 
         Ok(())
     }

@@ -44,7 +44,7 @@ fn main() {
     let opt = Opt::from_args();
 
     // Load application settings from the specified configuration file.
-    let mut settings = Settings::new(&opt.config).expect("Loaded settings");
+    let settings = Settings::new(&opt.config).expect("Loaded settings");
 
     // Initialize logging based on the settings.
     if let Err(error) = setup_logging(&settings) {
@@ -64,7 +64,7 @@ fn main() {
     }
 
     // Start the application.
-    if let Err(error) = Server::new().run(&mut settings) {
+    if let Err(error) = Server::new().run(settings) {
         error!("{}", error);
         process::exit(1);
     }

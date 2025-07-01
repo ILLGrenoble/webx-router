@@ -65,10 +65,10 @@ impl SessionProxy {
     ///
     /// # Returns
     /// A result indicating success or failure.
-    pub fn run(&mut self, settings: &Settings) -> Result<()> {
+    pub fn run(&mut self, settings: &Settings, secret_key: &str) -> Result<()> {
         let transport = &settings.transport;
 
-        let secure_rep_socket = self.create_secure_rep_socket(transport.ports.session, &transport.encryption.private)?;
+        let secure_rep_socket = self.create_secure_rep_socket(transport.ports.session, secret_key)?;
 
         let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC, INPROC_SESSION_TOPIC])?;
 
@@ -106,12 +106,12 @@ impl SessionProxy {
     ///
     /// # Returns
     /// The created ZeroMQ socket.
-    fn create_secure_rep_socket(&self, port: u32, secret_key_string: &str) -> Result<zmq::Socket> {
+    fn create_secure_rep_socket(&self, port: u32, secret_key: &str) -> Result<zmq::Socket> {
         let socket = self.context.socket(zmq::REP)?;
         socket.set_linger(0)?;
 
         // Secure the socket 
-        let secret_key = zmq::z85_decode(secret_key_string)?;
+        let secret_key = zmq::z85_decode(secret_key)?;
         socket.set_curve_server(true)?;
         socket.set_curve_secretkey(&secret_key)?;
 

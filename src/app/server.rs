@@ -1,7 +1,9 @@
-use crate::common::{Settings, EventBus, APPLICATION_SHUTDOWN_COMMAND, Result};
+use crate::common::{Settings, Result, EventBus, APPLICATION_SHUTDOWN_COMMAND};
 use crate::router::Transport;
 
 use std::thread;
+use signal_hook::iterator::Signals;
+use libc::{SIGINT, SIGQUIT, SIGTERM};
 
 /// Represents the main application responsible for initializing and running the WebX Router.
 pub struct Server {
@@ -21,7 +23,7 @@ impl Server {
     ///
     /// # Returns
     /// * `Result<()>` - Indicates success or failure of the operation.
-    pub fn run(&self, settings: &mut Settings) -> Result<()> {
+    pub fn run(&self, settings: Settings) -> Result<()> {
         info!("Starting WebX Router...");
 
         // Create ZMQ context
@@ -30,15 +32,16 @@ impl Server {
         // Create event bus
         let event_bus_thread = self.create_event_bus_thread(context.clone());
     
-        // Create CTRL-C shutdown publisher
+        // Create shutdown publisher to listen to signals
         self.create_shutdown_publisher(&context);
-    
+     
         // Create transport
-        let transport = Transport::new(context);
-    
+        let mut transport = Transport::new(context, settings);
+        
+        // Run transport blocking
         info!("WebX Router running");
-        transport.run(settings)?;
-    
+        transport.run()?;
+
         // Join event bus thread
         event_bus_thread.join().unwrap();
 
@@ -67,11 +70,18 @@ impl Server {
     /// * `context` - Reference to the ZeroMQ context used for communication.
     fn create_shutdown_publisher(&self, context: &zmq::Context) {
         let socket = EventBus::create_event_publisher(context).unwrap();
-        ctrlc::set_handler(move || {
-            info!("Sending shutdown command");
-            socket.send(APPLICATION_SHUTDOWN_COMMAND, 0).unwrap();
+        thread::spawn(move ||  {
 
-        }).expect("Error setting Ctrl-C handler");
+            // Set up signal handling
+            let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])
+                .expect("Signals::new() failed");
+
+            // Wait for a signal. This will block until a signal is received
+            signals.forever().next();
+
+            info!("Termination signal received. Shutting down WebX Router...");
+            socket.send(APPLICATION_SHUTDOWN_COMMAND, 0).unwrap();
+        });
     }
 }
 

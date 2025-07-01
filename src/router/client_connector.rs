@@ -1,4 +1,4 @@
-use crate::common::*;
+use crate::common::{Settings, Result, RouterError, TransportSettings, EventBus, INPROC_APP_TOPIC, APPLICATION_SHUTDOWN_COMMAND};
 
 /// Handles client connections and communication using a REQ-REP pattern.
 pub struct ClientConnector {
@@ -25,7 +25,7 @@ impl ClientConnector {
     ///
     /// # Returns
     /// * `Result<()>` - Indicates success or failure of the operation.
-    pub fn run(&mut self, settings: &Settings) -> Result<()> {
+    pub fn run(&mut self, settings: &Settings, public_key: &str) -> Result<()> {
         let transport = &settings.transport;
 
         // Create REP socket
@@ -50,7 +50,7 @@ impl ClientConnector {
 
                 // Check for REQ-REP message (if running)
                 if items[1].is_readable() && self.is_running {
-                    self.handle_request(&rep_socket, transport);
+                    self.handle_request(&rep_socket, transport, public_key);
                 }
             }
         }
@@ -106,7 +106,7 @@ impl ClientConnector {
     /// # Arguments
     /// * `rep_socket` - The ZeroMQ socket for handling client requests.
     /// * `transport` - Reference to the transport settings.
-    fn handle_request(&self, rep_socket: &zmq::Socket, transport: &TransportSettings) {
+    fn handle_request(&self, rep_socket: &zmq::Socket, transport: &TransportSettings, public_key: &str) {
         let mut msg = zmq::Message::new();
 
         if let Err(error) = rep_socket.recv(&mut msg, 0) {
@@ -121,7 +121,7 @@ impl ClientConnector {
                     transport.ports.publisher, 
                     transport.ports.collector,
                     transport.ports.session,
-                    transport.encryption.public).as_str(), 0) {
+                    public_key).as_str(), 0) {
                         error!("Failed to send comm message: {}", error);
                 }
 
