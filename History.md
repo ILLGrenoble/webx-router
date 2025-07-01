@@ -1,3 +1,8 @@
+1.4.1 01/07/2025
+================
+ * better handling of signals (sigterm, sigquit and sigint) to shutdown gracefully and kill spawned processes.
+ * Remove session activity management: no auto deletion of sessions. This improves the efficiency of forwarding instructions. Session deletion can be handled by the relay.
+
 1.4.0 30/06/2025
 ================
  * Use a session "secret" rather than session_id in communication to the webx engine so that it is invisible to all other users on the host. Only authenticated users of the session can know the secret.
