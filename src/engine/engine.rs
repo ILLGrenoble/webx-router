@@ -48,7 +48,11 @@ impl Engine {
     /// # Returns
     /// * `Result<String>` - The response from the engine, or an error if communication fails.
     pub fn send_request(&mut self, request: &str) -> Result<String> {
-        self.communicator.send_request(request)
+        self.communicator.send_request(request).map_err(|error| {
+            debug!("Request failed to WebX Engine. Recreating the socket as it may have been created prematurely");
+            self.communicator.reset();
+            error
+        }) 
     }
 
     /// Checks if the engine process is still running.

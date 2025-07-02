@@ -41,6 +41,12 @@ impl EngineCommunicator {
         &self.path
     }
 
+
+    /// Resets the communicator: closes the current socket if it exists.
+    pub fn reset(&mut self) {
+        self.close();
+    }
+
     /// Sends a request to the WebX Engine and waits for a response.
     ///
     /// # Arguments
