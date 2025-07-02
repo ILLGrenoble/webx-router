@@ -1,3 +1,7 @@
+1.4.2 02/07/2025
+================
+ * If requests to the engine fail then recreate the socket to it (sockets may be created prematurely).
+
 1.4.1 01/07/2025
 ================
  * better handling of signals (sigterm, sigquit and sigint) to shutdown gracefully and kill spawned processes.
