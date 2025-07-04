@@ -119,7 +119,7 @@ impl EngineService {
             match engine.send_request("ping") {
                 Ok(message) => {
                     if message != "pong" {
-                        error!("Received non-pong response from WebX Engine with session id {}: {}", engine.get_session_id(), message);
+                        error!("Received non-pong response from WebX Engine with session id {}: {}", engine.session_id(), message);
                         return Err(RouterError::EngineSessionError(format!("Received non-pong message from ping: {}", message)));
                     }
             

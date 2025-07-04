@@ -181,7 +181,7 @@ impl EngineSessionManager {
         // Spawn a new WebX Engine
         if let Some(engine) = self.multi_try_spawn_engine(&x11_session, &secret, context, session_config, 3) {
 
-            let mut session = EngineSession::new(secret, x11_session, engine);
+            let mut session = EngineSession::new(x11_session.account().username().to_string(), x11_session.display_id().to_string(), secret, engine);
 
             // Validate that the engine is running
             if let Err(error) = self.engine_service.validate_engine(session.engine_mut(), 3) {

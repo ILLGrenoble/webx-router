@@ -36,7 +36,7 @@ impl Engine {
     ///
     /// # Returns
     /// * `&str` - The session ID.
-    pub fn get_session_id(&self) -> &str {
+    pub fn session_id(&self) -> &str {
         return &self.session_id;
     }
 
