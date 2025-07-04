@@ -1,5 +1,3 @@
-use std::fmt;
-
 use crate::common::{ProcessHandle};
 use crate::authentication::Account;
 use super::{ScreenResolution};
@@ -13,7 +11,7 @@ pub struct X11Session {
     display_id: String,
     xauthority_file_path: String,
     xorg: ProcessHandle,
-    window_manager: ProcessHandle,
+    window_manager: Option<ProcessHandle>,
     resolution: ScreenResolution,
 }
 
@@ -28,7 +26,6 @@ impl X11Session {
     /// * `display_id` - The X11 display ID.
     /// * `xauthority_file_path` - The path to the Xauthority file.
     /// * `xorg` - The process handle for the Xorg server.
-    /// * `window_manager` - The process handle for the window manager.
     /// * `resolution` - The screen resolution for the session.
     ///
     /// # Returns
@@ -40,7 +37,6 @@ impl X11Session {
         display_id: String,
         xauthority_file_path: String,
         xorg: ProcessHandle,
-        window_manager: ProcessHandle,
         resolution: ScreenResolution,
     ) -> Self {
         Self {
@@ -49,7 +45,7 @@ impl X11Session {
             display_id,
             xauthority_file_path,
             xorg,
-            window_manager,
+            window_manager: None,
             resolution,
         }
     }
@@ -79,28 +75,18 @@ impl X11Session {
         &self.xorg
     }
 
-    /// Returns the process handle for the window manager.
-    pub fn window_manager(&self) -> &ProcessHandle {
+    /// Returns the option process handle for the window manager.
+    pub fn window_manager(&self) -> &Option<ProcessHandle> {
         &self.window_manager
+    }
+
+    /// Sets the process handle for the window manager.
+    pub fn set_window_manager(&mut self, window_manager: ProcessHandle) {
+        self.window_manager = Some(window_manager);
     }
 
     /// Returns the screen resolution for the session.
     pub fn resolution(&self) -> &ScreenResolution {
         &self.resolution
-    }
-}
-
-impl fmt::Display for X11Session {
-    /// Formats the `Session` for display.
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.debug_struct("X11Session")
-            .field("username", &self.account.username())
-            .field("uid", &self.account.uid())
-            .field("display_id", &self.display_id)
-            .field("xauthority_file_path", &self.xauthority_file_path)
-            .field("resolution", &format!("{}", &self.resolution))
-            .field("xorg pid", &self.xorg.pid())
-            .field("window_manager pid", &self.window_manager.pid())
-            .finish()
     }
 }

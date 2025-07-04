@@ -1,15 +1,12 @@
 use std::fs::{self, File};
 use std::os::unix::prelude::CommandExt;
 use std::process::Command;
-use std::sync::Mutex;
-use std::{thread, time};
 
 use nix::unistd::{User, Gid, Uid, setgroups, setgid, setuid};
-use pam_client::env_list::EnvList;
 use rand::Rng;
 use uuid::Uuid;
 
-use crate::authentication::Account;
+use crate::authentication::{AuthenticatedSession, Account};
 use crate::common::{Result, RouterError, XorgSettings, ProcessHandle};
 use crate::fs::{chmod, chown, mkdir, touch};
 use super::{ScreenResolution, X11Session};
@@ -18,7 +15,6 @@ use super::{ScreenResolution, X11Session};
 /// including creating, cleaning up, and launching Xorg servers and window managers.
 pub struct XorgService {
     settings: XorgSettings,
-    sessions: Mutex<Vec<X11Session>>,
 }
 
 impl XorgService {
@@ -30,67 +26,58 @@ impl XorgService {
     /// # Returns
     /// A new `XorgService` instance.
     pub fn new(settings: XorgSettings) -> Self {
-        let sessions = Mutex::new(Vec::new());
-        Self { settings, sessions }
-    }
-
-    /// Retrieves all active sessions.
-    ///
-    /// # Returns
-    /// An `Option` containing a vector of `X11Session` instances, or `None` if the sessions cannot be retrieved.
-    pub fn get_all_sessions(&self) -> Option<Vec<X11Session>> {
-        if let Ok(sessions) = self.sessions.lock() {
-            return Some(sessions.to_vec());
+        Self { 
+            settings
         }
-        None
     }
 
-    /// Retrieves the session for a specific user by their user ID.
+    /// Creates an Xauth token, launches the Xorg server, and starts the window manager for a session.
     ///
     /// # Arguments
-    /// * `uid` - The user ID to search for.
+    /// * `authenticated_session` - The authenticated session containing user account information.
+    /// * `resolution` - The screen resolution for the session.
     ///
     /// # Returns
-    /// An `Option` containing the `X11Session` if found, or `None` otherwise.
-    pub fn get_session_for_user(&self, uid: u32) -> Option<X11Session> {
-        debug!("Finding session for user id: {}", uid);
-        if let Ok(sessions) = self.sessions.lock() {
-            return sessions
-                .iter()
-                .find(|session| session.account().uid() == uid)
-                .cloned();
+    /// A `Result` containing the created `Session` or an `RouterError`.
+    pub fn create_xorg(&self, authenticated_session: &AuthenticatedSession, resolution: ScreenResolution) -> Result<X11Session> {
+        let webx_user = User::from_name("webx").unwrap().unwrap();
+
+        let display_number = self.get_next_display()?;
+        let authority_file_path = format!("{}/{}/Xauthority", self.settings.sessions_path, authenticated_session.account().uid());
+
+        // create the necessary configuration files
+        if let Err(error) = self.create_user_files(authenticated_session.account(), &webx_user, &authority_file_path) {
+            return Err(RouterError::X11SessionError(format!("Error occurred setting up the configuration for a session {}", error)));
         }
-        None
+
+        self.create_token(display_number, authenticated_session.account(), &authority_file_path, &webx_user)?;
+
+        let display_id = format!(":{}", display_number);
+        let session_id = Uuid::new_v4().simple().to_string();
+
+        // spawn the x server
+        let xorg = self.spawn_x_server(&session_id, &display_id, &authority_file_path, &resolution, authenticated_session)?;
+        
+        let session = X11Session::new(
+            session_id,
+            authenticated_session.account().clone(),
+            display_id,
+            authority_file_path.clone(),
+            xorg,
+            resolution,
+        );
+
+        Ok(session)
     }
 
-    /// Removes a session from the active sessions list.
-    ///
-    /// # Arguments
-    /// * `session` - The X11Session to remove.
-    pub fn remove_session(&self, session: &X11Session) {
-        if let Ok(mut sessions) = self.sessions.lock() {
-            sessions.retain(|s| s.id() != session.id());
+    pub fn create_window_manager(&self, x11_session: &X11Session, authenticated_session: &AuthenticatedSession) -> Result<ProcessHandle> {
+        // Verify that the window manager hasn't already been spawned
+        if let Some(window_manager) = x11_session.window_manager(){
+            return Ok(window_manager.clone());
         }
-    }
 
-    /// Cleans up zombie sessions by removing sessions whose Xorg processes are no longer running.
-    ///
-    /// # Returns
-    /// The number of sessions cleaned up.
-    pub fn clean_up(&self) -> u32 {
-        let mut cleaned_up_total = 0;
-        if let Ok(mut sessions) = self.sessions.lock() {
-            sessions.retain(|session| {
-                if session.xorg().is_running().unwrap_or(true) {
-                    true
-                } else {
-                    error!("Removing session {} as the xorg server is no longer running", session.id());
-                    cleaned_up_total += 1;
-                    false
-                }
-            });
-        }
-        cleaned_up_total
+        // spawn the window manager
+        self.spawn_window_manager(x11_session.id(), x11_session.display_id(), x11_session.xauthority_file_path(),  authenticated_session)
     }
 
     /// Generates a random Xauth cookie for authentication.
@@ -117,15 +104,14 @@ impl XorgService {
     /// * `webx_user` - The WebX system user.
     ///
     /// # Returns
-    /// A `Result` indicating success or an `RouterError`.
-    fn create_token(&self, display: u32, account: &Account, webx_user: &User) -> Result<()> {
+    /// A `Result` containing the path to the Xauthority file or an `RouterError
+    fn create_token(&self, display: u32, account: &Account, authority_file_path: &str, webx_user: &User) -> Result<()> {
         debug!("Creating xauth token for display {} and user {}", display, account.username());
         let cookie = self.create_cookie();
-        let file_path = format!("{}/{}/Xauthority", self.settings.sessions_path, account.uid());
         let display = format!(":{}", display);
         Command::new("xauth")
             .arg("-f")
-            .arg(&file_path)
+            .arg(&authority_file_path)
             .arg("add")
             .arg(display)
             .arg(".")
@@ -134,7 +120,7 @@ impl XorgService {
             .gid(webx_user.gid.as_raw())
             .output()?;
 
-        chmod(&file_path, 0o640)?;
+        chmod(&authority_file_path, 0o640)?;
         Ok(())
     }
 
@@ -144,20 +130,20 @@ impl XorgService {
     /// * `session_id` - The unique identifier for the session.
     /// * `display` - The display number.
     /// * `resolution` - The screen resolution for the session.
-    /// * `account` - The user account for the session.
-    /// * `environment` - The environment variables for the session.
+    /// * `authenticated_session` - The authenticated session containing user account information.
     ///
     /// # Returns
     /// A `Result` containing the `ProcessHandle` for the Xorg server or an `RouterError`.
     fn spawn_x_server(&self,
                       session_id: &str,
-                      display: u32,
+                      display: &str,
+                      authority_file_path: &str,
                       resolution: &ScreenResolution,
-                      account: &Account,
-                      environment: &EnvList) -> Result<ProcessHandle> {
-        debug!("Launching x server on display :{}", display);
-        let authority_file_path = format!("{}/{}/Xauthority", self.settings.sessions_path, account.uid());
-        let display = format!(":{}", display);
+                      authenticated_session: &AuthenticatedSession) -> Result<ProcessHandle> {
+        debug!("Launching x server on display {}", display);
+        let account = authenticated_session.account();
+        let environment = authenticated_session.environment();
+        
         let config = &self.settings.config_path;
         let stdout_file = File::create(&format!("{}/{}.xorg.out.log", self.settings.log_path, session_id))?;
         let stderr_file = File::create(&format!("{}/{}.xorg.err.log", self.settings.log_path, session_id))?;
@@ -167,9 +153,9 @@ impl XorgService {
 
         command
             .args([
-                display.as_str(),
+                display,
                 "-auth",
-                authority_file_path.as_str(),
+                authority_file_path,
                 "-config",
                 &config,
                 "-verbose",
@@ -218,20 +204,21 @@ impl XorgService {
     ///
     /// # Arguments
     /// * `session_id` - The unique identifier for the session.
-    /// * `display` - The display number.
-    /// * `account` - The user account for the session.
-    /// * `environment` - The environment variables for the session.
+    /// * `display` - The display id.
+    /// * `authority_file_path` - The path to the Xauthority file for the session.
+    /// * `authenticated_session` - The authenticated session containing user account information.
     ///
     /// # Returns
     /// A `Result` containing the `ProcessHandle` for the window manager or an `RouterError`.
     fn spawn_window_manager(&self,
                             session_id: &str,
-                            display: u32,
-                            account: &Account,
-                            environment: &EnvList) -> Result<ProcessHandle> {
-        let authority_file_path = format!("{}/{}/Xauthority", self.settings.sessions_path, account.uid());
+                            display: &str,
+                            authority_file_path: &str,
+                            authenticated_session: &AuthenticatedSession) -> Result<ProcessHandle> {
 
-        let display = format!(":{}", display);
+        let account = authenticated_session.account();
+        let environment = authenticated_session.environment();
+
         let log_path = &self.settings.log_path;
         let stdout_file = File::create(&format!("{}/{}.wm.out.log", log_path, session_id))?;
         let stderr_file = File::create(&format!("{}/{}.wm.err.log", log_path, session_id))?;
@@ -329,81 +316,13 @@ impl XorgService {
     ///
     /// # Returns
     /// A `Result` indicating success or an `RouterError`.
-    pub fn create_user_files(&self, account: &Account, webx_user: &User) -> Result<()> {
+    pub fn create_user_files(&self, account: &Account, webx_user: &User, authority_file_path: &str) -> Result<()> {
         debug!("Creating user files for user: {}", account.username());
         let gid = webx_user.gid.as_raw();
         let uid = account.uid();
         self.create_session_directory(format!("{}/{}", self.settings.sessions_path, uid), 0o750, uid, gid)?;
-        self.create_user_file(format!("{}/{}/Xauthority", self.settings.sessions_path, uid), 0o640, uid, gid)?;
+        self.create_user_file(authority_file_path, 0o640, uid, gid)?;
         Ok(())
-    }
-
-    /// Retrieves a session by its unique identifier.
-    ///
-    /// # Arguments
-    /// * `id` - The unique identifier of the session.
-    ///
-    /// # Returns
-    /// An `Option` containing the `Session` if found, or `None` otherwise.
-    pub fn get_by_id(&self, id: &str) -> Option<X11Session>{
-        if let Some(sessions) = self.get_all_sessions() {
-            let session = sessions
-                .into_iter()
-                .find(|session| session.id() == id);
-            return session;
-        }
-        None
-    }
-
-    /// Creates an Xauth token, launches the Xorg server, and starts the window manager for a session.
-    ///
-    /// # Arguments
-    /// * `account` - The user account for the session.
-    /// * `webx_user` - The WebX system user.
-    /// * `resolution` - The screen resolution for the session.
-    /// * `environment` - The environment variables for the session.
-    ///
-    /// # Returns
-    /// A `Result` containing the created `Session` or an `RouterError`.
-    pub fn execute(&self,
-                   account: &Account,
-                   webx_user: &User,
-                   resolution: ScreenResolution,
-                   environment: &EnvList) -> Result<X11Session> {
-        let display_id = self.get_next_display()?;
-
-        self.create_token(display_id, account, webx_user)?;
-
-        let session_id = Uuid::new_v4().simple().to_string();
-
-        // spawn the x server
-        let xorg = self.spawn_x_server(&session_id, display_id, &resolution, account, &environment)?;
-
-        // Sleep for 1 second (wait for x server to start)
-        thread::sleep(time::Duration::from_millis(1000));
-
-        // spawn the window manager
-        let window_manager = self.spawn_window_manager(&session_id, display_id, account, &environment)?;
-
-        info!(
-            "Started Xorg on display \"{}\" with process id {} and window manager process id {}", display_id, xorg.pid(), window_manager.pid());
-
-        let authority_file_path = format!("{}/{}/Xauthority", self.settings.sessions_path, account.uid());
-
-        let session = X11Session::new(
-            session_id,
-            account.clone(),
-            format!(":{}", display_id),
-            authority_file_path,
-            xorg,
-            window_manager,
-            resolution,
-        );
-        if let Ok(mut sessions) = self.sessions.lock() {
-            sessions.push(session.clone());
-            return Ok(session);
-        }
-        return Err(RouterError::X11SessionError(format!("Could not start session for user: {}", account)));
     }
 
     /// Finds the next available display number for a session.

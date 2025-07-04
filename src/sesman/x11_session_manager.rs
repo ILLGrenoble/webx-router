@@ -1,4 +1,5 @@
-use nix::unistd::User;
+use std::{thread, time};
+use std::sync::Mutex;
 
 use crate::{
     authentication::AuthenticatedSession,
@@ -11,6 +12,7 @@ use super::{XorgService, X11Session, ScreenResolution};
 /// including creating, retrieving, and terminating sessions.
 pub struct X11SessionManager {
     xorg_service: XorgService,
+    sessions: Mutex<Vec<X11Session>>,
 }
 
 impl X11SessionManager {
@@ -24,6 +26,7 @@ impl X11SessionManager {
     pub fn new(settings: &SesManSettings) -> Self {
         Self {
             xorg_service: XorgService::new(settings.xorg.to_owned()),
+            sessions: Mutex::new(Vec::new()),
         }
     }
 
@@ -35,21 +38,73 @@ impl X11SessionManager {
     ///
     /// # Returns
     /// A `Result` containing the created `X11Session` or a `RouterError`.
+    pub fn create_session_async(&self, authenticated_session: &AuthenticatedSession, resolution: ScreenResolution) -> Result<X11Session> {
+
+        // let's launch the x server...
+        return self.xorg_service.create_xorg(authenticated_session, resolution);
+    }
+
+    /// Creates a new session for a user.
+    ///
+    /// # Arguments
+    /// * `authenticated_session` - The authenticated user session (account and environment).
+    /// * `resolution` - The screen resolution for the session.
+    ///
+    /// # Returns
+    /// A `Result` containing the created `X11Session` or a `RouterError`.
     pub fn create_session(&self, authenticated_session: &AuthenticatedSession, resolution: ScreenResolution) -> Result<X11Session> {
-        // if the user already has an x session running then exit early...
-        if let Some(session) = self.xorg_service.get_session_for_user(authenticated_session.account().uid()) {
-            debug!("User {} already has a session {}", &authenticated_session.account().username(), session.id());
-            return Ok(session);
-        }
+        let x11_session = self.create_xorg(authenticated_session, resolution)?;
 
-        let webx_user = User::from_name("webx").unwrap().unwrap();
-        // create the necessary configuration files
-        if let Err(error) = self.xorg_service.create_user_files(authenticated_session.account(), &webx_user) {
-            return Err(RouterError::X11SessionError(format!("Error occurred setting up the configuration for a session {}", error)));
-        }
+        // Release the lock on sessions before sleeping
+        // Sleep for 1 second (wait for x server to start)
+        thread::sleep(time::Duration::from_millis(1000));
 
-        // finally, let's launch the x server...
-        return self.xorg_service.execute(authenticated_session.account(), &webx_user, resolution, authenticated_session.environment());
+        let x11_session = self.create_window_manager(x11_session.id(), authenticated_session)?;
+        
+        let wm_pid = match x11_session.window_manager() {
+            Some(wm) => wm.pid().to_string(),
+            None => "<None>".to_string(),
+        };
+        info!("Started Xorg on display \"{}\" with process id {} and window manager process id {}", x11_session.display_id(), x11_session.xorg().pid(), wm_pid);
+
+        Ok(x11_session)
+    }
+
+    fn create_xorg(&self, authenticated_session: &AuthenticatedSession, resolution: ScreenResolution) -> Result<X11Session> {
+        if let Ok(mut sessions) = self.sessions.lock() {
+            // if the user already has an x session running then exit early...
+            if let Some(session) = sessions.iter().find(|session| session.account().uid() == authenticated_session.account().uid()) {
+                debug!("User {} already has a session {}", &authenticated_session.account().username(), session.id());
+                return Ok(session.clone());
+            }
+
+            // let's launch the x server...
+            let x11_session = self.xorg_service.create_xorg(authenticated_session, resolution)?;
+
+            sessions.push(x11_session.clone());
+
+            Ok(x11_session)
+
+        } else {
+            return Err(RouterError::X11SessionError("Failed to lock sessions".to_string()));
+        }
+    }
+
+    fn create_window_manager(&self, session_id: &str, authenticated_session: &AuthenticatedSession) -> Result<X11Session> {
+        if let Ok(mut sessions) = self.sessions.lock() {
+            // Verify that X11 session exists
+            let x11_session = sessions.iter_mut().find(|session| session.id() == session_id)
+                .ok_or_else(|| RouterError::X11SessionError(format!("X11 Session no longer exists when spawning Window Manager process")))?;
+
+            let window_manager = self.xorg_service.create_window_manager(&x11_session, authenticated_session)?;
+
+            x11_session.set_window_manager(window_manager);
+
+            Ok(x11_session.clone())
+
+        } else {
+            Err(RouterError::X11SessionError("Failed to lock sessions".to_string()))
+        }
     }
 
     /// Retrieves all active X11 sessions.
@@ -57,25 +112,10 @@ impl X11SessionManager {
     /// # Returns
     /// An `Option` containing a vector of `X11Session` instances, or `None` if no sessions are found.
     pub fn get_all(&self) -> Option<Vec<X11Session>> {
-        self.xorg_service.get_all_sessions()
-    }
-
-    /// Terminates a session by its unique identifier.
-    ///
-    /// # Arguments
-    /// * `id` - The unique identifier of the session to terminate.
-    ///
-    /// # Returns
-    /// A `Result` indicating success or a `RouterError`.
-    pub fn kill_by_id(&self, id: &str) -> Result<()> {
-        if let Some(session) = self.xorg_service.get_by_id(id) {
-            // kill the processes
-            // the session will be automatically removed by the clean up procedure
-            self.kill_session(&session)?;
-
-            return Ok(());
+        if let Ok(sessions) = self.sessions.lock() {
+            return Some(sessions.to_vec());
         }
-        Err(RouterError::X11SessionError(format!("Session {} not found", id)))
+        None
     }
 
     /// Terminates all active sessions.
@@ -83,16 +123,15 @@ impl X11SessionManager {
     /// # Returns
     /// A `Result` indicating success or a `RouterError`.
     pub fn kill_all(&self) -> Result<()> {
-        if let Some(sessions) = self.xorg_service.get_all_sessions() {
-            for session in sessions {
+        if let Ok(sessions) = self.sessions.lock() {
+            for session in sessions.iter() {
                 self.kill_session(&session)?;
             } 
+            Ok(())
+        
+        } else {
+            Err(RouterError::X11SessionError("Failed to lock sessions".to_string()))
         }
-
-        // Remove all zombie sessions
-        self.clean_up();
-
-        Ok(())
     }
 
     /// Terminates a specific session by killing its window manager and Xorg processes,
@@ -104,23 +143,43 @@ impl X11SessionManager {
     /// # Returns
     /// A `Result` indicating success or a `RouterError`.
     fn kill_session(&self, session: &X11Session) -> Result<()> {
-        debug!("Killing window manager on display {} with pid: {}", session.display_id(), session.window_manager().pid());
-        session.window_manager().kill()?;
+        if let Ok(mut sessions) = self.sessions.lock() {
+            if let Some(window_manager) = session.window_manager() {
+                debug!("Killing window manager on display {} with pid: {}", session.display_id(), window_manager.pid());
+                window_manager.kill()?;
+            }
+            
+            debug!("Killing Xorg on display {} with pid: {}", session.display_id(), session.xorg().pid());
+            session.xorg().kill()?;
 
-        debug!("Killing Xorg on display {} with pid: {}", session.display_id(), session.xorg().pid());
-        session.xorg().kill()?;
+            // Remove the session from the active sessions list
+            sessions.retain(|s| s.id() != session.id());
 
-        self.xorg_service.remove_session(session);
+            info!("Stopped Xorg and Window Manager processes on display \"{}\" with id \"{}\"", session.display_id(), session.id());
 
-        info!("Stopped Xorg and Window Manager processes on display \"{}\" with id \"{}\"", session.display_id(), session.id());
+            Ok(())
 
-        Ok(())
+        } else {
+            Err(RouterError::X11SessionError("Failed to lock sessions".to_string()))
+        }
     }
 
     /// Cleans up zombie sessions by removing sessions whose processes are no longer running.
     pub fn clean_up(&self) {
-        if self.xorg_service.clean_up() > 0 {
-            info!("Cleaned up {} zombie sessions", self.xorg_service.clean_up());
+        if let Ok(mut sessions) = self.sessions.lock() {
+            let mut cleaned_up_total = 0;
+
+            sessions.retain(|session| {
+                if session.xorg().is_running().unwrap_or(true) {
+                    true
+                } else {
+                    error!("Removing session {} as the xorg server is no longer running", session.id());
+                    cleaned_up_total += 1;
+                    false
+                }
+            });
+
+            info!("Cleaned up {} zombie sessions", cleaned_up_total);
         }
     }
 }
