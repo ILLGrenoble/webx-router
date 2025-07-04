@@ -9,9 +9,10 @@ use pam_client::env_list::EnvList;
 use rand::Rng;
 use uuid::Uuid;
 
+use crate::authentication::Account;
 use crate::common::{Result, RouterError, XorgSettings, ProcessHandle};
 use crate::fs::{chmod, chown, mkdir, touch};
-use super::{Account, ScreenResolution, X11Session};
+use super::{ScreenResolution, X11Session};
 
 /// The `XorgService` struct provides functionality for managing Xorg sessions,
 /// including creating, cleaning up, and launching Xorg servers and window managers.
@@ -368,7 +369,7 @@ impl XorgService {
                    account: &Account,
                    webx_user: &User,
                    resolution: ScreenResolution,
-                   environment: EnvList) -> Result<X11Session> {
+                   environment: &EnvList) -> Result<X11Session> {
         let display_id = self.get_next_display()?;
 
         self.create_token(display_id, account, webx_user)?;

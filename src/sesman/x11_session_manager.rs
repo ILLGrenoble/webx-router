@@ -1,16 +1,15 @@
 use nix::unistd::User;
 
 use crate::{
-    authentication::{Authenticator, Credentials},
+    authentication::AuthenticatedSession,
     common::{RouterError, Result, SesManSettings},
 };
 
-use super::{XorgService, Account, X11Session, ScreenResolution};
+use super::{XorgService, X11Session, ScreenResolution};
 
 /// The `X11SessionManager` struct provides functionality for managing user X11 sessions,
 /// including creating, retrieving, and terminating sessions.
 pub struct X11SessionManager {
-    authenticator: Authenticator,
     xorg_service: XorgService,
 }
 
@@ -24,7 +23,6 @@ impl X11SessionManager {
     /// A new `X11SessionManager` instance.
     pub fn new(settings: &SesManSettings) -> Self {
         Self {
-            authenticator: Authenticator::new(settings.authentication.service.to_owned()),
             xorg_service: XorgService::new(settings.xorg.to_owned()),
         }
     }
@@ -32,36 +30,26 @@ impl X11SessionManager {
     /// Creates a new session for a user.
     ///
     /// # Arguments
-    /// * `credentials` - The user's credentials.
+    /// * `authenticated_session` - The authenticated user session (account and environment).
     /// * `resolution` - The screen resolution for the session.
     ///
     /// # Returns
     /// A `Result` containing the created `X11Session` or a `RouterError`.
-    pub fn create_session(&self, credentials: &Credentials, resolution: ScreenResolution) -> Result<X11Session> {
-        let environment = self.authenticator.authenticate(credentials)?;
-        info!("Successfully authenticated user: \"{}\"", &credentials.username());
-        
-        if let Ok(Some(user)) = User::from_name(credentials.username()) {
-            if let Some(account) = Account::from_user(user) {
-
-                // if the user already has an x session running then exit early...
-                if let Some(session) = self.xorg_service.get_session_for_user(account.uid()) {
-                    debug!("User {} already has a session {}", &credentials.username(), session.id());
-                    return Ok(session);
-                }
-
-                let webx_user = User::from_name("webx").unwrap().unwrap();
-                // create the necessary configuration files
-                if let Err(error) = self.xorg_service.create_user_files(&account, &webx_user) {
-                    return Err(RouterError::X11SessionError(format!("Error occurred setting up the configuration for a session {}", error)));
-                }
-
-                // finally, let's launch the x server...
-                return self.xorg_service.execute(&account, &webx_user, resolution, environment);
-            }
-            return Err(RouterError::AuthenticationError(format!("User \"{}\" is invalid. check they have a home directory?", credentials.username())));
+    pub fn create_session(&self, authenticated_session: &AuthenticatedSession, resolution: ScreenResolution) -> Result<X11Session> {
+        // if the user already has an x session running then exit early...
+        if let Some(session) = self.xorg_service.get_session_for_user(authenticated_session.account().uid()) {
+            debug!("User {} already has a session {}", &authenticated_session.account().username(), session.id());
+            return Ok(session);
         }
-        Err(RouterError::AuthenticationError(format!("Could not find user \"{}\"", credentials.username())))
+
+        let webx_user = User::from_name("webx").unwrap().unwrap();
+        // create the necessary configuration files
+        if let Err(error) = self.xorg_service.create_user_files(authenticated_session.account(), &webx_user) {
+            return Err(RouterError::X11SessionError(format!("Error occurred setting up the configuration for a session {}", error)));
+        }
+
+        // finally, let's launch the x server...
+        return self.xorg_service.execute(authenticated_session.account(), &webx_user, resolution, authenticated_session.environment());
     }
 
     /// Retrieves all active X11 sessions.

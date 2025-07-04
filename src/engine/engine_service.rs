@@ -3,7 +3,7 @@ use crate::{
     sesman::{X11Session}
 };
 
-use super::{Engine};
+use super::{Engine, SessionConfig};
 
 use std::{
     thread,
@@ -50,12 +50,11 @@ impl EngineService {
     /// * `secret` - The secret used as a webx-engine session_id
     /// * `context` - The ZeroMQ context.
     /// * `settings` - The application settings.
-    /// * `keyboard` - The keyboard layout.
-    /// * `engine_parameters` - Additional engine parameters as a HashMap.
+    /// * `session_config` - The session config (keyboard layout, additional parameters).
     ///
     /// # Returns
     /// * `Result<Engine>` - The spawned WebX Engine instance, or an error if spawning fails.
-    pub fn spawn_engine(&self, x11_session: &X11Session, secret: &str, context: &zmq::Context,  settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>) -> Result<Engine> {
+    pub fn spawn_engine(&self, x11_session: &X11Session, secret: &str, context: &zmq::Context, settings: &Settings, session_config: &SessionConfig) -> Result<Engine> {
         let engine_path = &settings.engine.path;
         let engine_log_path = &settings.engine.log_path;
         let message_proxy_path = &settings.transport.ipc.message_proxy;
@@ -82,12 +81,12 @@ impl EngineService {
         let mut command = Command::new(engine_path);
         command
             .arg("-k")
-            .arg(keyboard)
+            .arg(session_config.keyboard_layout())
             .stdout(file_out)
             .env("DISPLAY", x11_session.display_id())
             .env("XAUTHORITY", x11_session.xauthority_file_path())
             .env("WEBX_ENGINE_LOG_LEVEL", "debug")
-            .envs(self.convert_engine_parameters(engine_parameters))
+            .envs(self.convert_engine_parameters(session_config.engine_parameters()))
             .env("WEBX_ENGINE_IPC_SESSION_CONNECTOR_PATH", &session_connector_path)
             .env("WEBX_ENGINE_IPC_MESSAGE_PROXY_PATH", message_proxy_path)
             .env("WEBX_ENGINE_IPC_INSTRUCTION_PROXY_PATH", instruction_proxy_path)

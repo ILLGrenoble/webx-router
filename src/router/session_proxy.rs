@@ -1,6 +1,6 @@
 use crate::common::*;
-use crate::authentication::Credentials;
-use crate::engine::EngineSessionManager;
+use crate::authentication::{Authenticator, AuthenticatedSession, Credentials};
+use crate::engine::{EngineSessionManager, SessionConfig};
 use crate::sesman::ScreenResolution;
 
 use std::str;
@@ -16,6 +16,7 @@ use base64::engine::{general_purpose::STANDARD, Engine};
 /// It runs in a separate thread listening to requests from the WebX Relay.
 pub struct SessionProxy {
     context: zmq::Context,
+    authenticator: Authenticator,
     engine_session_manager: EngineSessionManager,
     is_running: bool,
 }
@@ -50,9 +51,10 @@ impl SessionProxy {
     ///
     /// # Arguments
     /// * `context` - The ZeroMQ context.
-    pub fn new(context: zmq::Context, settings: &SesManSettings) -> Self {
+    pub fn new(context: zmq::Context, settings: &Settings) -> Self {
         Self {
             context,
+            authenticator: Authenticator::new(settings.sesman.authentication.service.to_owned()),
             engine_session_manager: EngineSessionManager::new(settings),
             is_running: false,
         }
@@ -88,7 +90,7 @@ impl SessionProxy {
 
                 // Check for session REQ messages (if running)
                 if items[1].is_readable() && self.is_running {
-                    self.handle_secure_request(&secure_rep_socket, settings);
+                    self.handle_secure_request(&secure_rep_socket);
                 }
             }
         }
@@ -156,8 +158,7 @@ impl SessionProxy {
     ///
     /// # Arguments
     /// * `secure_rep_socket` - The ZeroMQ REP socket for secure requests.
-    /// * `settings` - The application settings.
-    fn handle_secure_request(&mut self, secure_rep_socket: &zmq::Socket, settings: &Settings) {
+    fn handle_secure_request(&mut self, secure_rep_socket: &zmq::Socket) {
         let mut msg = zmq::Message::new();
 
         // Get message on REQ socket
@@ -193,7 +194,7 @@ impl SessionProxy {
 
         } else if message_parts[0] == "create" {
             match self.decode_create_command(&message_parts) {
-                Ok((username, password, width, height, keyboard, engine_parameters)) => {
+                Ok((username, password, session_config)) => {
 
                     let credentials = match Credentials::new(username, password) {
                         Ok(credentials) => credentials,
@@ -206,9 +207,23 @@ impl SessionProxy {
                     };
 
                     info!("Got session create command for user \"{}\"", credentials.username());
-                        
+
+                    // Authenticate the user and create a session
+                    let authenticed_session = match self.authenticator.authenticate(&credentials) {
+                        Ok(authenticated_session) => authenticated_session,
+                        Err(error) => {
+                            error!("Failed to authenticate user {}: {}", credentials.username(), error);
+                            if let Err(error) = secure_rep_socket.send(format!("{},{}", SessionCreationReturnCodes::AuthenticationError.to_u32(), error).as_str(), 0) {
+                                error!("Failed to send session creation error response: {}", error);
+                            }
+                            return;
+                        }
+                    };
+
+                    info!("Successfully authenticated user: \"{}\"", &credentials.username());
+
                     // Request session from WebX Session Manager
-                    let message = self.get_or_create_session(settings, credentials, ScreenResolution::new(width, height), &keyboard, &engine_parameters);
+                    let message = self.get_or_create_session(authenticed_session, session_config);
 
                     // Send message response
                     if let Err(error) = secure_rep_socket.send(message.as_str(), 0) {
@@ -308,19 +323,17 @@ impl SessionProxy {
     /// Retrieves or creates a session and returns its ID.
     ///
     /// # Arguments
-    /// * `settings` - The application settings.
-    /// * `credentials` - The credentials for the user.
-    /// * `resolution` - The screen resolution for the session.
-    /// * `keyboard` - The keyboard layout.
-    /// * `engine_parameters` - Additional engine parameters.
+    /// * `authenticated_session` - The authenticated user session (account and environment).
+    /// * `session_config` - The session config (screen resolution, keyboard layout, additional parameters).
     ///
     /// # Returns
     /// * `String` - The session creation result as a string (success or error code and message).
-    fn get_or_create_session(&mut self, settings: &Settings, credentials: Credentials, resolution: ScreenResolution, keyboard: &str, engine_parameters: &HashMap<String, String>) -> String {
-        match self.engine_session_manager.get_or_create_engine_session(settings, &credentials, resolution, keyboard, engine_parameters, &self.context) {
+    fn get_or_create_session(&mut self, authenticated_session: AuthenticatedSession, session_config: SessionConfig) -> String {
+        let username = authenticated_session.account().username().to_string();
+        match self.engine_session_manager.get_or_create_engine_session(authenticated_session, session_config, &self.context) {
             Ok(secret) => format!("{},{}", SessionCreationReturnCodes::Success.to_u32(), secret),
             Err(error) => {
-                error!("Failed to create session for user {}: {}", credentials.username(), error);
+                error!("Failed to create session for user {}: {}", username, error);
                 match error {
                     RouterError::AuthenticationError(_) => {
                         format!("{},{}", SessionCreationReturnCodes::AuthenticationError.to_u32(), error)
@@ -357,7 +370,7 @@ impl SessionProxy {
     /// # Returns
     /// * `Result<(String, String, u32, u32, String, HashMap<String, String>)>` - 
     ///   Ok with a tuple of username, password, width, height, keyboard, and engine parameters if successful, Err otherwise.
-    fn decode_create_command(&self, message_parts: &Vec<&str>) -> Result<(String, String, u32, u32, String, HashMap<String, String>)> {
+    fn decode_create_command(&self, message_parts: &Vec<&str>) -> Result<(String, String, SessionConfig)> {
         if message_parts.len() >= 6 {
             let username_base64 = message_parts[1];
             let password_base64 = message_parts[2];
@@ -382,8 +395,14 @@ impl SessionProxy {
                 }
                 debug!("Parsed engine parameters: {:?}", engine_parameters);
             }
+
+            let session_config = SessionConfig::new(
+                keyboard,
+                ScreenResolution::new(width, height),
+                engine_parameters,
+            );
     
-            Ok((username, password, width, height, keyboard, engine_parameters))
+            Ok((username, password, session_config))
 
         } else {
             Err(RouterError::EngineSessionError(format!("Incorrect number of parameters. Got {}, expected 6", message_parts.len())))

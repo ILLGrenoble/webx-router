@@ -108,7 +108,7 @@ impl Transport {
             let settings = settings.clone();
             let secret_key = secret_key.to_string();
             move || {
-            if let Err(error) = SessionProxy::new(context, &settings.sesman).run(&settings, &secret_key) {
+            if let Err(error) = SessionProxy::new(context, &settings).run(&settings, &secret_key) {
                 error!("Session Proxy thread error: {}", error);
             }
         }})

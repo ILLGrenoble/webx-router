@@ -1,20 +1,20 @@
 use crate::{
-    authentication::{Credentials},
-    common::{RouterError, Result, SesManSettings, Settings},
-    sesman::{X11Session, ScreenResolution, X11SessionManager}
+    authentication::{AuthenticatedSession},
+    common::{RouterError, Result, Settings},
+    sesman::{X11Session, X11SessionManager}
 };
-use super::{EngineService, EngineSession, Engine};
+use super::{EngineService, EngineSession, Engine, SessionConfig};
 use std::{
     thread,
     time,
     sync::Mutex,
-    collections::HashMap,
 };
 use uuid::Uuid;
 
 /// The `EngineSessionManager` manages user WebX sessions, including creating, stopping,
 /// and validating sessions. It interacts with the WebX Session Manager and the WebX Engine.
 pub struct EngineSessionManager {
+    settings: Settings,
     x11_session_manager: X11SessionManager,
     engine_service: EngineService,
     sessions: Mutex<Vec<EngineSession>>,
@@ -24,13 +24,14 @@ impl EngineSessionManager {
     /// Creates a new `EngineSessionManager` instance.
     ///
     /// # Arguments
-    /// * `settings` - The session manager settings.
+    /// * `settings` - The settings.
     ///
     /// # Returns
     /// * `EngineSessionManager` - A new instance.
-    pub fn new(settings: &SesManSettings) -> Self {
+    pub fn new(settings: &Settings) -> Self {
         Self {
-            x11_session_manager: X11SessionManager::new(settings),
+            settings: settings.clone(),
+            x11_session_manager: X11SessionManager::new(&settings.sesman),
             engine_service: EngineService::new(),
             sessions: Mutex::new(Vec::new()),
         }
@@ -64,18 +65,15 @@ impl EngineSessionManager {
     /// A new WebX Engine process is spawned if necessary.
     ///
     /// # Arguments
-    /// * `settings` - The application settings.
-    /// * `credentials` - The credentials of the user.
-    /// * `resolution` - The screen resolution of the session display.
-    /// * `keyboard` - The keyboard layout.
-    /// * `engine_parameters` - Additional engine parameters.
+    /// * `authenticated_session` - The authenticated user session (account and environment).
+    /// * `session_config` - The session config (screen resolution, keyboard layout, additional parameters).
     /// * `context` - The ZeroMQ context.
     ///
     /// # Returns
     /// A reference to the created or retrieved session.
-    pub fn get_or_create_engine_session(&mut self, settings: &Settings, credentials: &Credentials, resolution: ScreenResolution, keyboard: &str, engine_parameters: &HashMap<String, String>, context: &zmq::Context) -> Result<String> {
+    pub fn get_or_create_engine_session(&mut self, authenticated_session: AuthenticatedSession, session_config: SessionConfig, context: &zmq::Context) -> Result<String> {
         // Request display/session Id from WebX Session Manager
-        let x11_session = self.x11_session_manager.create_session(credentials, resolution)?;
+        let x11_session = self.x11_session_manager.create_session(&authenticated_session, session_config.resolution().clone())?;
 
         debug!("X11 session obtained for user \"{}\" on display \"{}\"", x11_session.account().username(), x11_session.display_id());
 
@@ -104,13 +102,13 @@ impl EngineSessionManager {
         }
 
         // Create new session for the user
-        self.create_engine_session(x11_session, settings, keyboard, engine_parameters, context)?;
+        self.create_engine_session(x11_session, &session_config, context)?;
 
         if let Ok(sessions) = self.sessions.lock() {
             // Return the newly created session
-            match sessions.iter().find(|session| session.username() == credentials.username()) {
+            match sessions.iter().find(|session| session.username() == authenticated_session.account().username()) {
                 Some(session) => Ok(session.secret().to_string()),
-                None => Err(RouterError::EngineSessionError(format!("Could not retrieve Engine Session for user \"{}\"", credentials.username())))
+                None => Err(RouterError::EngineSessionError(format!("Could not retrieve Engine Session for user \"{}\"", authenticated_session.account().username())))
             }
         } else {
             Err(RouterError::EngineSessionError(format!("failed to get session lock")))
@@ -170,20 +168,18 @@ impl EngineSessionManager {
     ///
     /// # Arguments
     /// * `x11_session` - The X11 session details.
-    /// * `settings` - The application settings.
-    /// * `keyboard` - The keyboard layout.
-    /// * `engine_parameters` - Additional engine parameters.
+    /// * `session_config` - The session config (keyboard layout, additional parameters).
     /// * `context` - The ZeroMQ context.
     ///
     /// # Returns
     /// A result indicating success or failure.
-    fn create_engine_session(&mut self, x11_session: X11Session, settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>, context: &zmq::Context) -> Result<()> {
+    fn create_engine_session(&mut self, x11_session: X11Session, session_config: &SessionConfig, context: &zmq::Context) -> Result<()> {
         info!("Creating Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", &x11_session.account().username(), &x11_session.display_id(), x11_session.id());
 
         let secret = Uuid::new_v4().simple().to_string();
 
         // Spawn a new WebX Engine
-        if let Some(engine) = self.multi_try_spawn_engine(&x11_session, &secret, context, settings, keyboard, engine_parameters, 3) {
+        if let Some(engine) = self.multi_try_spawn_engine(&x11_session, &secret, context, session_config, 3) {
 
             let mut session = EngineSession::new(secret, x11_session, engine);
 
@@ -212,18 +208,16 @@ impl EngineSessionManager {
     /// # Arguments
     /// * `x11_session` - The X11 session details.
     /// * `context` - The ZeroMQ context.
-    /// * `settings` - The application settings.
-    /// * `keyboard` - The keyboard layout.
-    /// * `engine_parameters` - Additional engine parameters.
+    /// * `session_config` - The session config (keyboard layout, additional parameters).
     /// * `tries` - The maximum number of attempts.
     ///
     /// # Returns
     /// * `Option<Engine>` - Some(Engine) if successful, None otherwise.
-    fn multi_try_spawn_engine(&self, x11_session: &X11Session, secret: &str, context: &zmq::Context,  settings: &Settings, keyboard: &str, engine_parameters: &HashMap<String, String>, tries: u64) -> Option<Engine> {
+    fn multi_try_spawn_engine(&self, x11_session: &X11Session, secret: &str, context: &zmq::Context, session_config: &SessionConfig, tries: u64) -> Option<Engine> {
         let mut attempt = 0;
         while attempt < tries {
             debug!("Starting WebX Engine for user \"{}\" with session id \"{}\" on display \"{}\" (attempt {} / {})", x11_session.account().username(), x11_session.id(), x11_session.display_id(), attempt + 1, tries);
-            match self.engine_service.spawn_engine(x11_session, secret, context, settings, keyboard, engine_parameters) {
+            match self.engine_service.spawn_engine(x11_session, secret, context, &self.settings, session_config) {
                 Ok(engine) => {
                     thread::sleep(time::Duration::from_millis(attempt * 2000));
 
