@@ -1,12 +1,10 @@
 use std::fs::{self, File};
 use std::os::unix::prelude::CommandExt;
 use std::process::Command;
-use std::env;
 
 use nix::unistd::{User, Gid, Uid, setgroups, setgid, setuid};
 use rand::Rng;
 use uuid::Uuid;
-use x11rb::connect;
 
 use crate::authentication::{AuthenticatedSession, Account};
 use crate::common::{Result, RouterError, XorgSettings, ProcessHandle};
@@ -80,33 +78,6 @@ impl XorgService {
 
         // spawn the window manager
         self.spawn_window_manager(x11_session.id(), x11_session.display_id(), x11_session.xauthority_file_path(), x11_session.authenticated_session())
-    }
-
-    pub fn is_xorg_ready(&self, session: &X11Session) -> bool {
-        // Save current env to restore later
-        let old_display = env::var("DISPLAY").ok();
-        let old_xauth = env::var("XAUTHORITY").ok();
-
-        // Set env for this check
-        env::set_var("DISPLAY", session.display_id());
-        env::set_var("XAUTHORITY", session.xauthority_file_path());
-
-        // Try to connect
-        let result = connect(None).is_ok();
-
-        // Restore previous env
-        if let Some(val) = old_display {
-            env::set_var("DISPLAY", val);
-        } else {
-            env::remove_var("DISPLAY");
-        }
-        if let Some(val) = old_xauth {
-            env::set_var("XAUTHORITY", val);
-        } else {
-            env::remove_var("XAUTHORITY");
-        }
-
-        result
     }
 
     /// Generates a random Xauth cookie for authentication.

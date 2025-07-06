@@ -7,7 +7,8 @@ use std::str;
 use std::process;
 use std::vec::Vec;
 use std::collections::HashMap;
-
+use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
+use std::{thread, time};
 use base64::engine::{general_purpose::STANDARD, Engine};
 
 /// The `SessionProxy` manages session-related requests such as requesting a new X11 session from the WebX Session Manager (using
@@ -17,8 +18,8 @@ use base64::engine::{general_purpose::STANDARD, Engine};
 pub struct SessionProxy {
     context: zmq::Context,
     authenticator: Authenticator,
-    engine_session_manager: EngineSessionManager,
-    is_running: bool,
+    engine_session_manager: Arc<Mutex<EngineSessionManager>>,
+    is_running: Arc<AtomicBool>,
 }
 
 #[repr(u32)]
@@ -52,11 +53,12 @@ impl SessionProxy {
     /// # Arguments
     /// * `context` - The ZeroMQ context.
     pub fn new(context: zmq::Context, settings: &Settings) -> Self {
+        let context_clone = context.clone();
         Self {
             context,
             authenticator: Authenticator::new(settings.sesman.authentication.service.to_owned()),
-            engine_session_manager: EngineSessionManager::new(settings),
-            is_running: false,
+            engine_session_manager: Arc::new(Mutex::new(EngineSessionManager::new(settings, context_clone))),
+            is_running: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -74,13 +76,16 @@ impl SessionProxy {
 
         let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC, INPROC_SESSION_TOPIC])?;
 
+        // Create the thread to update session creations
+        self.create_session_startup_thread();
+
         let mut items = [
             event_bus_sub_socket.as_poll_item(zmq::POLLIN),
             secure_rep_socket.as_poll_item(zmq::POLLIN),
         ];
 
-        self.is_running = true;
-        while self.is_running {
+        self.is_running.store(true, Ordering::SeqCst);
+        while self.is_running.load(Ordering::SeqCst) {
             // Poll both sockets
             if zmq::poll(&mut items, 5000).is_ok() {
                 // Check for event bus messages
@@ -89,7 +94,7 @@ impl SessionProxy {
                 }
 
                 // Check for session REQ messages (if running)
-                if items[1].is_readable() && self.is_running {
+                if items[1].is_readable() && self.is_running.load(Ordering::SeqCst) {
                     self.handle_secure_request(&secure_rep_socket);
                 }
             }
@@ -142,10 +147,14 @@ impl SessionProxy {
         } else {
             let event = msg.as_str().unwrap();
             if event == APPLICATION_SHUTDOWN_COMMAND {
-                self.is_running = false;
+                self.is_running.store(false, Ordering::SeqCst);
 
                 // Close all sessions gracefully
-                self.engine_session_manager.shutdown();
+                if let Ok(mut engine_session_manager) = self.engine_session_manager.lock() {
+                    engine_session_manager.shutdown();
+                } else {
+                    error!("Failed to lock EngineSessionManager for shutdown");
+                };
 
             } else {
                 warn!("Got unknown event bus command: {}", event);
@@ -243,23 +252,25 @@ impl SessionProxy {
             }
 
         } else if message_parts[0] == "list" {
-            // Debug output of all X11 sessions
-            let all_x11_sessions = self.engine_session_manager.get_all_x11_sessions().map(|sessions| {
-                sessions.iter().map(|session| 
+            if let Ok(engine_session_manager) = self.engine_session_manager.lock() {
+                // Debug output of all X11 sessions
+                let all_x11_sessions = engine_session_manager.get_all_x11_sessions().iter().map(|session| 
                     format!("id={},width={},height={},username={},uid={}", 
                         session.id(),
                         session.resolution().width(),
                         session.resolution().height(),
                         session.account().username(),
                         session.account().uid()),
-                    ).collect::<Vec<String>>().join("\n")
-            }).unwrap_or_default();
-            debug!("All X11 sessions:\n{}", all_x11_sessions);
+                    ).collect::<Vec<String>>().join("\n");
+                debug!("All X11 sessions:\n{}", all_x11_sessions);
 
-            if let Err(error) = secure_rep_socket.send(all_x11_sessions.as_str(), 0) {
-                error!("Failed to send list of all sessions: {}", error);
+                if let Err(error) = secure_rep_socket.send(all_x11_sessions.as_str(), 0) {
+                    error!("Failed to send list of all sessions: {}", error);
+                }
+                send_empty = false;
+            } else {
+                error!("Failed to lock EngineSessionManager to list sessions");
             }
-            send_empty = false;
 
         } else if message_parts[0] == "connect" {
 
@@ -270,17 +281,21 @@ impl SessionProxy {
             } else {
                 let secret = message_parts[1];
 
-                // Forward the connection request
-                match self.engine_session_manager.send_engine_request(&secret, &message_text) {
-                    Ok(response) => {
-                        if let Err(error) = secure_rep_socket.send(response.as_str(), 0) {
-                            error!("Failed to send client connection response: {}", error);
+                if let Ok(mut engine_session_manager) = self.engine_session_manager.lock() {
+                    // Forward the connection request
+                    match engine_session_manager.send_engine_request(&secret, &message_text) {
+                        Ok(response) => {
+                            if let Err(error) = secure_rep_socket.send(response.as_str(), 0) {
+                                error!("Failed to send client connection response: {}", error);
+                            }
+                            send_empty = false;
                         }
-                        send_empty = false;
+                        Err(error) => {
+                            error!("Failed to send client connection request: {}", error);
+                        }
                     }
-                    Err(error) => {
-                        error!("Failed to send client connection request: {}", error);
-                    }
+                } else {
+                    error!("Failed to lock EngineSessionManager to connect session");
                 }
             }
 
@@ -293,17 +308,21 @@ impl SessionProxy {
             } else {
                 let secret = message_parts[1];
 
-                // Forward the disconnection request
-                match self.engine_session_manager.send_engine_request(&secret, &message_text) {
-                    Ok(response) => {
-                        if let Err(error) = secure_rep_socket.send(response.as_str(), 0) {
-                            error!("Failed to send client disconnection response: {}", error);
+                if let Ok(mut engine_session_manager) = self.engine_session_manager.lock() {
+                    // Forward the disconnection request
+                    match engine_session_manager.send_engine_request(&secret, &message_text) {
+                        Ok(response) => {
+                            if let Err(error) = secure_rep_socket.send(response.as_str(), 0) {
+                                error!("Failed to send client disconnection response: {}", error);
+                            }
+                            send_empty = false;
                         }
-                        send_empty = false;
+                        Err(error) => {
+                            error!("Failed to send client disconnection request: {}", error);
+                        }
                     }
-                    Err(error) => {
-                        error!("Failed to send client disconnection request: {}", error);
-                    }
+                } else {
+                    error!("Failed to lock EngineSessionManager to disconnect session");
                 }
             }
 
@@ -330,19 +349,24 @@ impl SessionProxy {
     /// * `String` - The session creation result as a string (success or error code and message).
     fn get_or_create_session(&mut self, authenticated_session: AuthenticatedSession, session_config: SessionConfig) -> String {
         let username = authenticated_session.account().username().to_string();
-        match self.engine_session_manager.get_or_create_engine_session(authenticated_session, session_config, &self.context) {
-            Ok(secret) => format!("{},{}", SessionCreationReturnCodes::Success.to_u32(), secret),
-            Err(error) => {
-                error!("Failed to create session for user {}: {}", username, error);
-                match error {
-                    RouterError::AuthenticationError(_) => {
-                        format!("{},{}", SessionCreationReturnCodes::AuthenticationError.to_u32(), error)
-                    },
-                    _ => {
-                        format!("{},{}", SessionCreationReturnCodes::CreationError.to_u32(), error)
+        if let Ok(mut engine_session_manager) = self.engine_session_manager.lock() {
+            match engine_session_manager.get_or_create_x11_and_engine_session(authenticated_session, session_config) {
+                Ok(secret) => format!("{},{}", SessionCreationReturnCodes::Success.to_u32(), secret),
+                Err(error) => {
+                    error!("Failed to create session for user {}: {}", username, error);
+                    match error {
+                        RouterError::AuthenticationError(_) => {
+                            format!("{},{}", SessionCreationReturnCodes::AuthenticationError.to_u32(), error)
+                        },
+                        _ => {
+                            format!("{},{}", SessionCreationReturnCodes::CreationError.to_u32(), error)
+                        }
                     }
                 }
             }
+        } else {
+            error!("Failed to lock EngineSessionManager to create session for user {}", username);
+            format!("{},{}", SessionCreationReturnCodes::CreationError.to_u32(), "Failed to lock EngineSessionManager")
         }
     }
 
@@ -354,11 +378,16 @@ impl SessionProxy {
     /// # Returns
     /// * `String` - A string indicating the ping result ("pong" or "pang" with error).
     fn ping_engine(&mut self, secret: &str) -> String {
-        match self.engine_session_manager.ping_engine(secret) {
-            Ok(_) => format!("pong,{}", secret),
-            Err(error) => {
-                format!("pang,{},{}", secret, error)
+        if let Ok(mut engine_session_manager) = self.engine_session_manager.lock() {
+            match engine_session_manager.ping_engine(secret) {
+                Ok(_) => format!("pong,{}", secret),
+                Err(error) => {
+                    format!("pang,{},{}", secret, error)
+                }
             }
+        } else {
+            error!("Failed to lock EngineSessionManager to ping session with secret {}", secret);
+            format!("pang,{},Failed to lock EngineSessionManager", secret)
         }
     }
 
@@ -422,5 +451,26 @@ impl SessionProxy {
         let output = str::from_utf8(&decoded_bytes)?;
 
         Ok(output.to_string())
+    }
+
+    fn create_session_startup_thread(&self) -> thread::JoinHandle<()> {
+        let engine_session_manager = Arc::clone(&self.engine_session_manager);
+        let is_running = Arc::clone(&self.is_running);
+
+        thread::spawn({
+            move || {
+                while is_running.load(Ordering::SeqCst) {
+                    if let Ok(mut engine_session_manager) = engine_session_manager.lock() {
+                        info!("Update of sessions startups...");
+
+                        // Check if there are any starting processes that need to be launched
+                        engine_session_manager.update_starting_processes();
+                    }
+
+                    // Sleep for a while before checking again
+                    thread::sleep(time::Duration::from_millis(1000));
+                }
+            }
+        })
     }
 }

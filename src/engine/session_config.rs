@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 /// Represents the configuration for a user session.
 /// This includes the keyboard layout, screen resolution, and engine parameters.
+#[derive(Clone)]
 pub struct SessionConfig {
     keyboard_layout: String,
     resolution: ScreenResolution,
