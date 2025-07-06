@@ -1,7 +1,6 @@
 pub enum EngineStatus {
     Starting,
     Ready,
-    Error(String),
 }
 
 pub struct EngineSessionInfo {
@@ -23,9 +22,5 @@ impl EngineSessionInfo {
 
     pub fn status(&self) -> &EngineStatus {
         &self.status
-    }
-
-    pub fn set_status(&mut self, status: EngineStatus) {
-        self.status = status;
     }
 }

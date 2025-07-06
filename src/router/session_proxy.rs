@@ -1,6 +1,6 @@
 use crate::common::*;
 use crate::authentication::{Authenticator, AuthenticatedSession, Credentials};
-use crate::engine::{EngineSessionManager, SessionConfig};
+use crate::engine::{EngineSessionManager, SessionConfig, EngineStatus};
 use crate::sesman::ScreenResolution;
 
 use std::str;
@@ -201,7 +201,8 @@ impl SessionProxy {
             }
             send_empty = false;
 
-        } else if message_parts[0] == "create" {
+        } else if message_parts[0] == "create" || message_parts[0] == "create_async" {
+            let is_async = message_parts[0] == "create_async";
             match self.decode_create_command(&message_parts) {
                 Ok((username, password, session_config)) => {
 
@@ -232,7 +233,11 @@ impl SessionProxy {
                     info!("Successfully authenticated user: \"{}\"", &credentials.username());
 
                     // Request session from WebX Session Manager
-                    let message = self.get_or_create_session(authenticed_session, session_config);
+                    let message = if is_async {
+                        self.get_or_create_session_async(authenticed_session, session_config)
+                    } else {
+                        self.get_or_create_session(authenticed_session, session_config)
+                    };
 
                     // Send message response
                     if let Err(error) = secure_rep_socket.send(message.as_str(), 0) {
@@ -352,6 +357,35 @@ impl SessionProxy {
         if let Ok(mut engine_session_manager) = self.engine_session_manager.lock() {
             match engine_session_manager.get_or_create_x11_and_engine_session(authenticated_session, session_config) {
                 Ok(secret) => format!("{},{}", SessionCreationReturnCodes::Success.to_u32(), secret),
+                Err(error) => {
+                    error!("Failed to create session for user {}: {}", username, error);
+                    match error {
+                        RouterError::AuthenticationError(_) => {
+                            format!("{},{}", SessionCreationReturnCodes::AuthenticationError.to_u32(), error)
+                        },
+                        _ => {
+                            format!("{},{}", SessionCreationReturnCodes::CreationError.to_u32(), error)
+                        }
+                    }
+                }
+            }
+        } else {
+            error!("Failed to lock EngineSessionManager to create session for user {}", username);
+            format!("{},{}", SessionCreationReturnCodes::CreationError.to_u32(), "Failed to lock EngineSessionManager")
+        }
+    }
+
+        fn get_or_create_session_async(&mut self, authenticated_session: AuthenticatedSession, session_config: SessionConfig) -> String {
+        let username = authenticated_session.account().username().to_string();
+        if let Ok(mut engine_session_manager) = self.engine_session_manager.lock() {
+            match engine_session_manager.get_or_create_x11_and_engine_session_async(authenticated_session, session_config) {
+                Ok(engine_session_info) => {
+                    let running: u32 = match engine_session_info.status() {
+                        EngineStatus::Starting => 0,
+                        EngineStatus::Ready => 1,
+                    };
+                    format!("{},{},{}", SessionCreationReturnCodes::Success.to_u32(), &engine_session_info.secret(), running)
+                },
                 Err(error) => {
                     error!("Failed to create session for user {}: {}", username, error);
                     match error {

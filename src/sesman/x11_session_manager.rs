@@ -53,9 +53,10 @@ impl X11SessionManager {
     pub fn get_or_create_x11_session(&mut self, authenticated_session: &AuthenticatedSession, resolution: ScreenResolution) -> Result<X11Session> {
         let x11_session = self.create_xorg(authenticated_session, resolution)?;
 
-        // Release the lock on sessions before sleeping
-        // Sleep for 1 second (wait for x server to start)
-        thread::sleep(time::Duration::from_millis(1000));
+        // Wait for Xorg to start
+        while x11_session.is_xorg_ready() == false {
+            thread::sleep(time::Duration::from_millis(100));
+        }
 
         let x11_session = self.create_window_manager(x11_session.id())?;
         
