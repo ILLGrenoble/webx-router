@@ -1,10 +1,12 @@
 use std::fs::{self, File};
 use std::os::unix::prelude::CommandExt;
 use std::process::Command;
+use std::env;
 
 use nix::unistd::{User, Gid, Uid, setgroups, setgid, setuid};
 use rand::Rng;
 use uuid::Uuid;
+use x11rb::connect;
 
 use crate::authentication::{AuthenticatedSession, Account};
 use crate::common::{Result, RouterError, XorgSettings, ProcessHandle};
@@ -60,7 +62,7 @@ impl XorgService {
         
         let session = X11Session::new(
             session_id,
-            authenticated_session.account().clone(),
+            authenticated_session.clone(),
             display_id,
             authority_file_path.clone(),
             xorg,
@@ -70,14 +72,41 @@ impl XorgService {
         Ok(session)
     }
 
-    pub fn create_window_manager(&self, x11_session: &X11Session, authenticated_session: &AuthenticatedSession) -> Result<ProcessHandle> {
+    pub fn create_window_manager(&self, x11_session: &X11Session) -> Result<ProcessHandle> {
         // Verify that the window manager hasn't already been spawned
         if let Some(window_manager) = x11_session.window_manager(){
             return Ok(window_manager.clone());
         }
 
         // spawn the window manager
-        self.spawn_window_manager(x11_session.id(), x11_session.display_id(), x11_session.xauthority_file_path(),  authenticated_session)
+        self.spawn_window_manager(x11_session.id(), x11_session.display_id(), x11_session.xauthority_file_path(), x11_session.authenticated_session())
+    }
+
+    pub fn is_xorg_ready(&self, session: &X11Session) -> bool {
+        // Save current env to restore later
+        let old_display = env::var("DISPLAY").ok();
+        let old_xauth = env::var("XAUTHORITY").ok();
+
+        // Set env for this check
+        env::set_var("DISPLAY", session.display_id());
+        env::set_var("XAUTHORITY", session.xauthority_file_path());
+
+        // Try to connect
+        let result = connect(None).is_ok();
+
+        // Restore previous env
+        if let Some(val) = old_display {
+            env::set_var("DISPLAY", val);
+        } else {
+            env::remove_var("DISPLAY");
+        }
+        if let Some(val) = old_xauth {
+            env::set_var("XAUTHORITY", val);
+        } else {
+            env::remove_var("XAUTHORITY");
+        }
+
+        result
     }
 
     /// Generates a random Xauth cookie for authentication.
@@ -142,7 +171,7 @@ impl XorgService {
                       authenticated_session: &AuthenticatedSession) -> Result<ProcessHandle> {
         debug!("Launching x server on display {}", display);
         let account = authenticated_session.account();
-        let environment = authenticated_session.environment();
+        let environment = authenticated_session.environment().clone();
         
         let config = &self.settings.config_path;
         let stdout_file = File::create(&format!("{}/{}.xorg.out.log", self.settings.log_path, session_id))?;
@@ -168,7 +197,7 @@ impl XorgService {
             .env("XDG_RUNTIME_DIR", xdg_run_time_dir)
             .env("XRDP_START_WIDTH", resolution.width().to_string())
             .env("XRDP_START_HEIGHT", resolution.height().to_string())
-            .envs(environment.iter_tuples())
+            .envs(environment)
             .current_dir(account.home())
             .stdout(std::process::Stdio::from(stdout_file))
             .stderr(std::process::Stdio::from(stderr_file));
@@ -217,7 +246,7 @@ impl XorgService {
                             authenticated_session: &AuthenticatedSession) -> Result<ProcessHandle> {
 
         let account = authenticated_session.account();
-        let environment = authenticated_session.environment();
+        let environment = authenticated_session.environment().clone();
 
         let log_path = &self.settings.log_path;
         let stdout_file = File::create(&format!("{}/{}.wm.out.log", log_path, session_id))?;
@@ -233,7 +262,7 @@ impl XorgService {
             .env("XAUTHORITY", authority_file_path)
             .env("HOME", account.home())
             .env("XDG_RUNTIME_DIR", xdg_run_time_dir)
-            .envs(environment.iter_tuples())
+            .envs(environment)
             .current_dir(account.home())
             .stdout(std::process::Stdio::from(stdout_file))
             .stderr(std::process::Stdio::from(stderr_file));

@@ -59,7 +59,7 @@ impl X11SessionManager {
         // Sleep for 1 second (wait for x server to start)
         thread::sleep(time::Duration::from_millis(1000));
 
-        let x11_session = self.create_window_manager(x11_session.id(), authenticated_session)?;
+        let x11_session = self.create_window_manager(x11_session.id())?;
         
         let wm_pid = match x11_session.window_manager() {
             Some(wm) => wm.pid().to_string(),
@@ -69,7 +69,7 @@ impl X11SessionManager {
 
         Ok(x11_session)
     }
-
+    
     fn create_xorg(&self, authenticated_session: &AuthenticatedSession, resolution: ScreenResolution) -> Result<X11Session> {
         if let Ok(mut sessions) = self.sessions.lock() {
             // if the user already has an x session running then exit early...
@@ -90,13 +90,13 @@ impl X11SessionManager {
         }
     }
 
-    fn create_window_manager(&self, session_id: &str, authenticated_session: &AuthenticatedSession) -> Result<X11Session> {
+    fn create_window_manager(&self, session_id: &str) -> Result<X11Session> {
         if let Ok(mut sessions) = self.sessions.lock() {
             // Verify that X11 session exists
             let x11_session = sessions.iter_mut().find(|session| session.id() == session_id)
                 .ok_or_else(|| RouterError::X11SessionError(format!("X11 Session no longer exists when spawning Window Manager process")))?;
 
-            let window_manager = self.xorg_service.create_window_manager(&x11_session, authenticated_session)?;
+            let window_manager = self.xorg_service.create_window_manager(&x11_session)?;
 
             x11_session.set_window_manager(window_manager);
 
@@ -164,22 +164,4 @@ impl X11SessionManager {
         }
     }
 
-    /// Cleans up zombie sessions by removing sessions whose processes are no longer running.
-    pub fn clean_up(&self) {
-        if let Ok(mut sessions) = self.sessions.lock() {
-            let mut cleaned_up_total = 0;
-
-            sessions.retain(|session| {
-                if session.xorg().is_running().unwrap_or(true) {
-                    true
-                } else {
-                    error!("Removing session {} as the xorg server is no longer running", session.id());
-                    cleaned_up_total += 1;
-                    false
-                }
-            });
-
-            info!("Cleaned up {} zombie sessions", cleaned_up_total);
-        }
-    }
 }

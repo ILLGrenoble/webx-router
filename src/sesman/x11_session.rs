@@ -1,5 +1,5 @@
 use crate::common::{ProcessHandle};
-use crate::authentication::Account;
+use crate::authentication::{Account, AuthenticatedSession};
 use super::{ScreenResolution};
 
 /// The `Session` struct represents a user session managed by the WebX Session Manager.
@@ -7,7 +7,7 @@ use super::{ScreenResolution};
 #[derive(Clone)]
 pub struct X11Session {
     id: String,
-    account: Account,
+    authenticated_session: AuthenticatedSession,
     display_id: String,
     xauthority_file_path: String,
     xorg: ProcessHandle,
@@ -21,8 +21,7 @@ impl X11Session {
     ///
     /// # Arguments
     /// * `id` - The unique identifier for the session.
-    /// * `username` - The username of the session owner.
-    /// * `uid` - The user ID of the session owner.
+    /// * `authenticated_session` - The authenticated session details.
     /// * `display_id` - The X11 display ID.
     /// * `xauthority_file_path` - The path to the Xauthority file.
     /// * `xorg` - The process handle for the Xorg server.
@@ -31,17 +30,10 @@ impl X11Session {
     /// # Returns
     /// A new `Session` instance.
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        id: String,
-        account: Account,
-        display_id: String,
-        xauthority_file_path: String,
-        xorg: ProcessHandle,
-        resolution: ScreenResolution,
-    ) -> Self {
+    pub fn new(id: String, authenticated_session: AuthenticatedSession, display_id: String, xauthority_file_path: String, xorg: ProcessHandle, resolution: ScreenResolution) -> Self {
         Self {
             id,
-            account,
+            authenticated_session,
             display_id,
             xauthority_file_path,
             xorg,
@@ -57,7 +49,12 @@ impl X11Session {
 
     /// Returns the acount of the session owner.
     pub fn account(&self) -> &Account {
-        &self.account
+        &self.authenticated_session.account()
+    }
+
+    /// Returns the authenticated session details.
+    pub fn authenticated_session(&self) -> &AuthenticatedSession {
+        &self.authenticated_session
     }
 
     /// Returns the X11 display ID.

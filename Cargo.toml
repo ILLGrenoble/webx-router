@@ -28,6 +28,7 @@ pam-client2 = "0.5"
 shared_child = "1.0"
 rpassword = "7.3"
 signal-hook = "0.3"
+x11rb = "0.13"
 
 [[bin]]
 name = "webx-router"
