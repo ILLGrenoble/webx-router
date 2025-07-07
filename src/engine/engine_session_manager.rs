@@ -9,6 +9,7 @@ use std::{
     time,
 };
 use uuid::Uuid;
+use time::Duration;
 
 /// The `EngineSessionManager` manages user WebX sessions, including creating, stopping,
 /// and validating sessions. It interacts with the WebX Session Manager and the WebX Engine.
@@ -107,9 +108,9 @@ impl EngineSessionManager {
     ///
     /// # Returns
     /// A reference to the created or retrieved session.
-    pub fn get_or_create_x11_and_engine_session(&mut self, authenticated_session: AuthenticatedSession, session_config: SessionConfig) -> Result<String> {
+    pub fn get_or_create_x11_and_engine_session(&mut self, authenticated_session: AuthenticatedSession, session_config: SessionConfig, timeout: Duration) -> Result<String> {
         // Request display/session Id from WebX Session Manager
-        let x11_session = self.x11_session_manager.get_or_create_x11_session(&authenticated_session, session_config.resolution().clone())?;
+        let x11_session = self.x11_session_manager.get_or_create_x11_session(&authenticated_session, session_config.resolution().clone(), timeout)?;
         debug!("X11 session obtained for user \"{}\" on display \"{}\"", x11_session.account().username(), x11_session.display_id());
 
         self.get_or_create_engine_session(&x11_session, session_config)

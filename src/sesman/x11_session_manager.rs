@@ -1,4 +1,5 @@
 use std::{thread, time};
+use time::Duration;
 
 use crate::{
     authentication::AuthenticatedSession,
@@ -50,11 +51,15 @@ impl X11SessionManager {
     ///
     /// # Returns
     /// A `Result` containing the created `X11Session` or a `RouterError`.
-    pub fn get_or_create_x11_session(&mut self, authenticated_session: &AuthenticatedSession, resolution: ScreenResolution) -> Result<X11Session> {
+    pub fn get_or_create_x11_session(&mut self, authenticated_session: &AuthenticatedSession, resolution: ScreenResolution, timeout: Duration) -> Result<X11Session> {
         let x11_session = self.create_xorg(authenticated_session, resolution)?;
 
         // Wait for Xorg to start
-        while x11_session.is_xorg_ready() == false {
+        let start = time::Instant::now();
+        while !x11_session.is_xorg_ready() {
+            if start.elapsed() > timeout {
+                return Err(RouterError::X11SessionError(format!("Timed out waiting for Xorg to become ready for session {}", x11_session.id())));
+            }
             thread::sleep(time::Duration::from_millis(100));
         }
 

@@ -354,8 +354,10 @@ impl SessionProxy {
     /// * `String` - The session creation result as a string (success or error code and message).
     fn get_or_create_session(&mut self, authenticated_session: AuthenticatedSession, session_config: SessionConfig) -> String {
         let username = authenticated_session.account().username().to_string();
+        
         if let Ok(mut engine_session_manager) = self.engine_session_manager.lock() {
-            match engine_session_manager.get_or_create_x11_and_engine_session(authenticated_session, session_config) {
+            let timeout = time::Duration::from_secs(15);
+            match engine_session_manager.get_or_create_x11_and_engine_session(authenticated_session, session_config, timeout) {
                 Ok(secret) => format!("{},{}", SessionCreationReturnCodes::Success.to_u32(), secret),
                 Err(error) => {
                     error!("Failed to create session for user {}: {}", username, error);
