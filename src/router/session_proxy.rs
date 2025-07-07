@@ -1,6 +1,6 @@
 use crate::common::*;
 use crate::authentication::{Authenticator, AuthenticatedSession, Credentials};
-use crate::engine::{EngineSessionManager, SessionConfig, EngineStatus};
+use crate::engine::{EngineSessionManager, SessionConfig};
 use crate::sesman::ScreenResolution;
 
 use std::str;
@@ -201,6 +201,22 @@ impl SessionProxy {
             }
             send_empty = false;
 
+        } else if message_parts[0] == "status" {
+            // Verify that we have a sessionId
+            if message_parts.len() < 2 {
+                error!("Received invalid status command");
+
+            } else {
+                let secret = message_parts[1];
+
+                // Get the status of the session (starting or ready)
+                let status_response = self.get_session_status(&secret);
+                if let Err(error) = secure_rep_socket.send(status_response.as_str(), 0) {
+                    error!("Failed to send session status message: {}", error);
+                }
+                send_empty = false;
+            }
+
         } else if message_parts[0] == "create" || message_parts[0] == "create_async" {
             let is_async = message_parts[0] == "create_async";
             match self.decode_create_command(&message_parts) {
@@ -377,16 +393,12 @@ impl SessionProxy {
         }
     }
 
-        fn get_or_create_session_async(&mut self, authenticated_session: AuthenticatedSession, session_config: SessionConfig) -> String {
+    fn get_or_create_session_async(&mut self, authenticated_session: AuthenticatedSession, session_config: SessionConfig) -> String {
         let username = authenticated_session.account().username().to_string();
         if let Ok(mut engine_session_manager) = self.engine_session_manager.lock() {
             match engine_session_manager.get_or_create_x11_and_engine_session_async(authenticated_session, session_config) {
                 Ok(engine_session_info) => {
-                    let running: u32 = match engine_session_info.status() {
-                        EngineStatus::Starting => 0,
-                        EngineStatus::Ready => 1,
-                    };
-                    format!("{},{},{}", SessionCreationReturnCodes::Success.to_u32(), &engine_session_info.secret(), running)
+                    format!("{},{},{}", SessionCreationReturnCodes::Success.to_u32(), engine_session_info.secret(), engine_session_info.status().to_u32())
                 },
                 Err(error) => {
                     error!("Failed to create session for user {}: {}", username, error);
@@ -419,6 +431,30 @@ impl SessionProxy {
                 Ok(_) => format!("pong,{}", secret),
                 Err(error) => {
                     format!("pang,{},{}", secret, error)
+                }
+            }
+        } else {
+            error!("Failed to lock EngineSessionManager to ping session with secret {}", secret);
+            format!("pang,{},Failed to lock EngineSessionManager", secret)
+        }
+    }
+
+
+    /// Gets the status of a session.
+    ///
+    /// # Arguments
+    /// * `secret` - The secret of the session to ping.
+    ///
+    /// # Returns
+    /// * `String` - A string indicating the ping result ("pong" or "pang" with error).
+    fn get_session_status(&self, secret: &str) -> String {
+        if let Ok(engine_session_manager) = self.engine_session_manager.lock() {
+            match engine_session_manager.get_session_status(secret) {
+                Ok(engine_session_info) => {
+                    format!("{},{}", secret, engine_session_info.status().to_u32())
+                },
+                Err(error) => {
+                    format!("{}", error)
                 }
             }
         } else {
@@ -497,14 +533,12 @@ impl SessionProxy {
             move || {
                 while is_running.load(Ordering::SeqCst) {
                     if let Ok(mut engine_session_manager) = engine_session_manager.lock() {
-                        info!("Update of sessions startups...");
-
                         // Check if there are any starting processes that need to be launched
                         engine_session_manager.update_starting_processes();
                     }
 
                     // Sleep for a while before checking again
-                    thread::sleep(time::Duration::from_millis(1000));
+                    thread::sleep(time::Duration::from_millis(500));
                 }
             }
         })

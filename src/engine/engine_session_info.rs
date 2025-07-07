@@ -3,6 +3,15 @@ pub enum EngineStatus {
     Ready,
 }
 
+impl EngineStatus {
+    pub fn to_u32(&self) -> u32 {
+        match self {
+            EngineStatus::Starting => 0,
+            EngineStatus::Ready => 1,
+        }
+    }
+}
+
 pub struct EngineSessionInfo {
     secret: String,
     status: EngineStatus,

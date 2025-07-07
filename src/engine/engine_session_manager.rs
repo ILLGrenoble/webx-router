@@ -172,6 +172,18 @@ impl EngineSessionManager {
         }
     }
 
+    pub fn get_session_status(&self, secret: &str) -> Result<EngineSessionInfo> {
+        // Determine first if it is in the creation processes
+        if let Some(process) = self.creation_processes.iter().find(|process| process.secret() == secret) {
+            return Ok(EngineSessionInfo::new(process.secret().to_string(), EngineStatus::Starting));
+        }
+
+        let session = self.sessions.iter().find(|session| session.secret() == secret)
+            .ok_or_else(|| RouterError::EngineSessionError(format!("Could not retrieve Engine Session with provided secret")))?;
+
+        Ok(EngineSessionInfo::new(session.secret().to_string(), EngineStatus::Ready))
+    }
+
     /// Sends a request to a WebX Engine and retrieves the response.
     ///
     /// # Arguments
@@ -188,39 +200,49 @@ impl EngineSessionManager {
     }
 
     pub fn update_starting_processes(&mut self) {
-        let all_sessions = self.x11_session_manager.sessions();
-
         // Clone creation processes so that we can alter the original vector
         let creation_processes_clone = self.creation_processes.clone();
+        if creation_processes_clone.is_empty() {
+            return;
+        }
+
+        let all_x11_sessions = self.x11_session_manager.sessions();
+
         for process in creation_processes_clone.iter() {
-            if let Some(x11_session) = all_sessions.iter().find(|session| session.id() == process.session_id()) {
+            if let Some(x11_session) = all_x11_sessions.iter().find(|session| session.id() == process.session_id()) {
+
                 if x11_session.is_xorg_ready() {
                     // Start the window manager
-                    info!("XorgCheckThread: Creating window manager for session id \"{}\" on display \"{}\"", x11_session.id(), x11_session.display_id());
+                    info!("Xorg-Status-Checker: Xorg is now running, creating window manager for session id \"{}\" on display \"{}\"", x11_session.id(), x11_session.display_id());
                     if let Err(error) = self.x11_session_manager.create_window_manager(x11_session.id()) {
-                        error!("XorgCheckThread: {}: removing creation process", error);
+                        error!("Xorg-Status-Checker: {}: removing creation process", error);
                         // Remove the creation process if the window manager creation fails
                         self.creation_processes.retain(|p| p.session_id() != process.session_id());
                     }
 
                     // Create the engine session
                     if let Err(error) = self.create_engine_session(x11_session, Some(process.secret().to_string()), process.session_config()) {
-                        error!("XorgCheckThread: Failed to create engine session for user \"{}\" on display \"{}\" with id \"{}\": {}", 
+                        error!("Xorg-Status-Checker: Failed to create engine session for user \"{}\" on display \"{}\" with id \"{}\": {}", 
                             x11_session.account().username(), 
                             x11_session.display_id(), 
                             x11_session.id(),
                             error);
                         // Remove the creation process if the engine session creation fails
                         self.creation_processes.retain(|p| p.session_id() != process.session_id());
+                    
                     } else {
-                        info!("XorgCheckThread: Successfully created engine session for user \"{}\" on display \"{}\" with id \"{}\"", 
+                        info!("Xorg-Status-Checker: Successfully created engine session for user \"{}\" on display \"{}\" with id \"{}\"", 
                             x11_session.account().username(), 
                             x11_session.display_id(), 
                             x11_session.id());
                         // Remove the creation process since the engine session was successfully created
                         self.creation_processes.retain(|p| p.session_id() != process.session_id());
                     }
+
+                } else {
+                    debug!("Xorg-Status-Checker: Xorg is not ready yet for session id \"{}\" on display \"{}\"", x11_session.id(), x11_session.display_id());
                 }
+
             } else {
                 warn!("XorgCheckThread: No matching X11 session found for creation process with session id \"{}\". Removing process.", process.session_id());
                 // Remove the creation process if no matching X11 session is found
