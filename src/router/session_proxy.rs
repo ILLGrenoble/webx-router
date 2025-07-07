@@ -360,7 +360,7 @@ impl SessionProxy {
         }
     }
 
-    /// Retrieves or creates a session and returns its ID.
+    /// Retrieves or creates a session synchronously and returns its secret.
     ///
     /// # Arguments
     /// * `authenticated_session` - The authenticated user session (account and environment).
@@ -393,6 +393,15 @@ impl SessionProxy {
         }
     }
 
+
+    /// Retrieves or creates a session asynchronously and returns its secret and creation status (starting or running)
+    ///
+    /// # Arguments
+    /// * `authenticated_session` - The authenticated user session (account and environment).
+    /// * `session_config` - The session config (screen resolution, keyboard layout, additional parameters).
+    ///
+    /// # Returns
+    /// * `String` - The session creation result as a string (success or error code and message).
     fn get_or_create_session_async(&mut self, authenticated_session: AuthenticatedSession, session_config: SessionConfig) -> String {
         let username = authenticated_session.account().username().to_string();
         if let Ok(mut engine_session_manager) = self.engine_session_manager.lock() {
@@ -446,7 +455,7 @@ impl SessionProxy {
     /// * `secret` - The secret of the session to ping.
     ///
     /// # Returns
-    /// * `String` - A string indicating the ping result ("pong" or "pang" with error).
+    /// * `String` - A string indicating the creation status of the session
     fn get_session_status(&self, secret: &str) -> String {
         if let Ok(engine_session_manager) = self.engine_session_manager.lock() {
             match engine_session_manager.get_session_status(secret) {
@@ -525,6 +534,9 @@ impl SessionProxy {
         Ok(output.to_string())
     }
 
+
+    /// Spawns a background thread that regularly updates session startup processes.
+    /// This thread will keep running as long as `is_running` is true.
     fn create_session_startup_thread(&self) -> thread::JoinHandle<()> {
         let engine_session_manager = Arc::clone(&self.engine_session_manager);
         let is_running = Arc::clone(&self.is_running);

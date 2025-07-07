@@ -90,6 +90,13 @@ impl X11Session {
         &self.resolution
     }
 
+    /// Checks if the Xorg server for this session is ready by attempting to connect to the X11 display.
+    /// This temporarily sets the DISPLAY and XAUTHORITY environment variables to those of the session,
+    /// tries to connect using x11rb, and then restores the previous environment variables.
+    ///
+    /// # Returns
+    /// * `true` if a connection to the X server succeeds (Xorg is ready)
+    /// * `false` otherwise
     pub fn is_xorg_ready(&self) -> bool {
         // Save current env to restore later
         let old_display = env::var("DISPLAY").ok();

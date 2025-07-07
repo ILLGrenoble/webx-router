@@ -1,5 +1,7 @@
 use super::SessionConfig;
 
+/// SessionCreationProcess contains information regarding the session while it is being created. Stored by the
+/// EngineSessionManager and updated regularly.
 #[derive(Clone)]
 pub struct SessionCreationProcess {
     session_id: String,

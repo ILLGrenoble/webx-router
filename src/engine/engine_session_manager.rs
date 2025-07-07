@@ -57,11 +57,23 @@ impl EngineSessionManager {
     /// Retrieves all X11 sessions.
     ///
     /// # Returns
-    /// * `Option<Vec<X11Session>>` - vector of sessions.
+    /// * `Vec<X11Session>` - vector of sessions.
     pub fn get_all_x11_sessions(&self) -> Vec<X11Session> {
         self.x11_session_manager.sessions()
     }
 
+
+    /// Retrieves or creates an X11 session and an engine session asynchronously.
+    /// If the X11 session already has a window manager, it tries to get or create the engine session.
+    /// If a creation process is already running for this session, it returns the existing process info.
+    /// Otherwise, it starts a new creation process and returns its info.
+    ///
+    /// # Arguments
+    /// * `authenticated_session` - The authenticated user session (account and environment).
+    /// * `session_config` - The session configuration (screen resolution, keyboard layout, etc.).
+    ///
+    /// # Returns
+    /// * `Result<EngineSessionInfo>` - Information about the engine session, including its secret and status.
     pub fn get_or_create_x11_and_engine_session_async(&mut self, authenticated_session: AuthenticatedSession, session_config: SessionConfig) -> Result<EngineSessionInfo> {
         // Request display/session Id from WebX Session Manager
         let x11_session = self.x11_session_manager.get_or_create_x11_session_async(&authenticated_session, session_config.resolution().clone())?;
@@ -99,12 +111,14 @@ impl EngineSessionManager {
         }
     }
 
-    /// Retrieves or creates a session for a user based on the provided settings and credentials.
-    /// A new WebX Engine process is spawned if necessary.
+    /// Retrieves or creates a session for a user based on the provided settings and credentials. First the X11 session (Xorg and window manager) 
+    /// are obtained/created and then a new WebX Engine process is spawned if necessary.
+    /// This process is made synchronously: Attention on slow systems this can take several seconds.
     ///
     /// # Arguments
     /// * `authenticated_session` - The authenticated user session (account and environment).
     /// * `session_config` - The session config (screen resolution, keyboard layout, additional parameters).
+    /// * `timeout` - The timeout for the process
     ///
     /// # Returns
     /// A reference to the created or retrieved session.
@@ -114,37 +128,6 @@ impl EngineSessionManager {
         debug!("X11 session obtained for user \"{}\" on display \"{}\"", x11_session.account().username(), x11_session.display_id());
 
         self.get_or_create_engine_session(&x11_session, session_config)
-    }
-
-    fn get_or_create_engine_session(&mut self, x11_session: &X11Session, session_config: SessionConfig) -> Result<String> {
-        // See if session already exists matching x11_session attributes
-        if let Some(session) = self.sessions.iter().find(|session| 
-            session.username() == x11_session.account().username() && 
-            session.id() == x11_session.id() && 
-            session.display_id() == x11_session.display_id()) {
-
-            info!("Found existing Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", session.username(), session.display_id(), session.id());
-            return Ok(session.secret().to_string());
-        }
-
-        // Remove existing sessions for the user
-        if let Some((index, session)) = self.sessions.iter_mut().enumerate().find(|(_, session)| session.username() == x11_session.account().username()) {
-            debug!("Removing existing Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", session.username(), session.display_id(), session.id());
-            // stop the engine session
-            session.stop_engine();
-
-            // Remove the old engine session
-            self.sessions.remove(index);        
-        }
-
-        // Create new session for the user
-        self.create_engine_session(x11_session, None, &session_config)?;
-
-        // Return the newly created session
-        match self.sessions.iter().find(|session| session.username() == x11_session.account().username()) {
-            Some(session) => Ok(session.secret().to_string()),
-            None => Err(RouterError::EngineSessionError(format!("Could not retrieve Engine Session for user \"{}\"", x11_session.account().username())))
-        }
     }
 
     /// Pings a WebX Engine to check if it is active.
@@ -171,7 +154,17 @@ impl EngineSessionManager {
             }
         }
     }
-
+    
+    /// Returns the status of an engine session given its secret.
+    /// If the session is still in the creation process, returns `EngineStatus::Starting`.
+    /// If the session is fully created and running, returns `EngineStatus::Ready`.
+    ///
+    /// # Arguments
+    /// * `secret` - The secret associated with the engine session.
+    ///
+    /// # Returns
+    /// * `Ok(EngineSessionInfo)` - Information about the engine session, including its secret and status.
+    /// * `Err(RouterError)` - If no session or creation process is found for the provided secret.
     pub fn get_session_status(&self, secret: &str) -> Result<EngineSessionInfo> {
         // Determine first if it is in the creation processes
         if let Some(process) = self.creation_processes.iter().find(|process| process.secret() == secret) {
@@ -199,6 +192,10 @@ impl EngineSessionManager {
         self.engine_service.send_engine_request(session.engine_mut(), request)
     }
 
+    /// Checks the status of all session creation processes and advances them if possible.
+    /// - If Xorg is ready for a session, attempts to start the window manager and engine session (if they haven't already been started).
+    /// - Removes creation processes if the X11 session is missing or if any step fails.
+    /// This function is run regularly in a separate thread.
     pub fn update_starting_processes(&mut self) {
         // Clone creation processes so that we can alter the original vector
         let creation_processes_clone = self.creation_processes.clone();
@@ -206,8 +203,10 @@ impl EngineSessionManager {
             return;
         }
 
+        // Get all current X11 sessions
         let all_x11_sessions = self.x11_session_manager.sessions();
 
+        // Iterate over each creation process
         for process in creation_processes_clone.iter() {
             if let Some(x11_session) = all_x11_sessions.iter().find(|session| session.id() == process.session_id()) {
 
@@ -264,6 +263,50 @@ impl EngineSessionManager {
             if let Err(error) = self.x11_session_manager.create_window_manager(x11_session.id()) {
                 error!("XorgCheckThread: {}", error);
             }
+        }
+    }
+    
+
+    /// Retrieves or creates an engine session for a given X11 session and session config.
+    /// - If a session already exists for the user, display, and session id, returns its secret.
+    /// - If a session exists for the user (but not this display/id), stops and removes it before creating a new one.
+    /// - Always creates a new engine session if needed and returns its secret.
+    ///
+    /// # Arguments
+    /// * `x11_session` - The X11 session to associate with the engine session.
+    /// * `session_config` - The session configuration (screen resolution, keyboard layout, etc.).
+    ///
+    /// # Returns
+    /// * `Ok(String)` - The secret of the created or found engine session.
+    /// * `Err(RouterError)` - If the session could not be created or retrieved.
+    fn get_or_create_engine_session(&mut self, x11_session: &X11Session, session_config: SessionConfig) -> Result<String> {
+        // See if session already exists matching x11_session attributes
+        if let Some(session) = self.sessions.iter().find(|session| 
+            session.username() == x11_session.account().username() && 
+            session.id() == x11_session.id() && 
+            session.display_id() == x11_session.display_id()) {
+
+            info!("Found existing Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", session.username(), session.display_id(), session.id());
+            return Ok(session.secret().to_string());
+        }
+
+        // Remove existing sessions for the user
+        if let Some((index, session)) = self.sessions.iter_mut().enumerate().find(|(_, session)| session.username() == x11_session.account().username()) {
+            debug!("Removing existing Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", session.username(), session.display_id(), session.id());
+            // stop the engine session
+            session.stop_engine();
+
+            // Remove the old engine session
+            self.sessions.remove(index);        
+        }
+
+        // Create new session for the user
+        self.create_engine_session(x11_session, None, &session_config)?;
+
+        // Return the newly created session
+        match self.sessions.iter().find(|session| session.username() == x11_session.account().username()) {
+            Some(session) => Ok(session.secret().to_string()),
+            None => Err(RouterError::EngineSessionError(format!("Could not retrieve Engine Session for user \"{}\"", x11_session.account().username())))
         }
     }
 

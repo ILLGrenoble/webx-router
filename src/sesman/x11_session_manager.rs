@@ -74,6 +74,16 @@ impl X11SessionManager {
         Ok(x11_session)
     }
     
+    /// Creates a new Xorg session for a user if one does not already exist.
+    /// If the user already has an X session running, returns the existing session.
+    /// Otherwise, launches a new X server, adds the session to the session list, and returns it.
+    ///
+    /// # Arguments
+    /// * `authenticated_session` - The authenticated user session (account and environment).
+    /// * `resolution` - The desired screen resolution for the session.
+    ///
+    /// # Returns
+    /// A `Result` containing the created or existing `X11Session`, or a `RouterError`.
     fn create_xorg(&mut self, authenticated_session: &AuthenticatedSession, resolution: ScreenResolution) -> Result<X11Session> {
         // if the user already has an x session running then exit early...
         if let Some(session) = self.sessions.iter().find(|session| session.account().uid() == authenticated_session.account().uid()) {
@@ -89,6 +99,14 @@ impl X11SessionManager {
         Ok(x11_session)
     }
 
+    /// Creates a window manager process for an existing X11 session.
+    /// Looks up the session by ID, spawns the window manager, and updates the session.
+    ///
+    /// # Arguments
+    /// * `session_id` - The ID of the X11 session to associate with the window manager.
+    ///
+    /// # Returns
+    /// A `Result` containing the updated `X11Session`, or a `RouterError` if the session does not exist.
     pub fn create_window_manager(&mut self, session_id: &str) -> Result<X11Session> {
         // Verify that X11 session exists
         let x11_session = self.sessions.iter_mut().find(|session| session.id() == session_id)
