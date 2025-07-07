@@ -1,3 +1,5 @@
+use crate::common::{Result, RouterError};
+
 pub enum EngineStatus {
     Starting,
     Ready,
@@ -8,6 +10,14 @@ impl EngineStatus {
         match self {
             EngineStatus::Starting => 0,
             EngineStatus::Ready => 1,
+        }
+    }
+
+    pub fn try_from(value: u32) -> Result<Self> {
+        match value {
+            0 => Ok(EngineStatus::Starting),
+            1 => Ok(EngineStatus::Ready),
+            _ => Err(RouterError::SystemError(format!("Failed to convert EngineStatus {}", value))),
         }
     }
 }

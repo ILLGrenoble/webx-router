@@ -1,5 +1,6 @@
 use crate::common::{Result, RouterError, random_string};
 use crate::router::SessionCreationReturnCodes;
+use crate::engine::EngineStatus;
 use crate::fs::chmod;
 
 use base64::engine::{general_purpose::STANDARD, Engine};
@@ -24,6 +25,7 @@ struct CommResponse {
 pub struct CreationResponse {
     pub code: SessionCreationReturnCodes,
     pub message: String,
+    pub engine_status: Option<EngineStatus>,
 }
 
 /// Holds information about a session socket, including its port and the ZMQ socket itself.
@@ -127,7 +129,7 @@ impl Cli {
 
         // Send the creation request to the WebX Router
         debug!("Sending creation request to WebX Router...");
-        let create_request = format!("create,{},{},{},{},{}", self.encode_base64(&credentials_path), self.encode_base64(&password), width, height, keyboard_layout);
+        let create_request = format!("create_async,{},{},{},{},{}", self.encode_base64(&credentials_path), self.encode_base64(&password), width, height, keyboard_layout);
         let response = self.send(&session_socket.socket, &create_request)?;
 
         debug!("... received response {}", response);
@@ -162,7 +164,7 @@ impl Cli {
     ///
     /// # Returns
     /// * `Result<()>` - Ok if the loop exits cleanly, Err if ping fails.
-    pub fn wait_for_interrupt(&self, session_id: &str) -> Result<()> {
+    pub fn wait_for_interrupt(&self, session_id: &str, mut engine_status: EngineStatus) -> Result<()> {
         let session_socket = self.session_socket.as_ref().ok_or_else(|| RouterError::SystemError(format!("Session Socket is unavailable")))?;
 
         // Shared flag to indicate if the process should keep running
@@ -178,23 +180,51 @@ impl Cli {
             }
         }).expect("Error setting Ctrl-C handler");
 
-        let mut last_ping = Instant::now();
+        let mut last_request_time = Instant::now();
+        let status_request = format!("status,{}", session_id);
         let ping_request = format!("ping,{}", session_id);
 
         // Main loop: sleep, send pings every 5 seconds, and check running flag
         while is_running {
             thread::sleep(time::Duration::from_millis(100));
 
-            // Every 5 seconds, send a ping to the WebX Router
-            if last_ping.elapsed() >= Duration::from_secs(5) {
-                debug!("Sending ping request to WebX Router...");
-                let ping_response = self.send(&session_socket.socket, &ping_request)?;
-                debug!("... received response {}", ping_response);
-                last_ping = Instant::now();
+            match engine_status {
+                EngineStatus::Ready => {
+                    // Every 5 seconds, send a ping to the WebX Router
+                    if last_request_time.elapsed() >= Duration::from_secs(5) {
+                        debug!("Sending ping request to WebX Router...");
+                        let ping_response = self.send(&session_socket.socket, &ping_request)?;
+                        debug!("... received response {}", ping_response);
+                        last_request_time = Instant::now();
 
-                // If ping fails, exit with error
-                if !self.decode_ping_response(&ping_response) {
-                    return Err(RouterError::EngineSessionError(format!("Failed to ping engine")));
+                        // If ping fails, exit with error
+                        if !self.decode_ping_response(&ping_response) {
+                            return Err(RouterError::EngineSessionError(format!("Failed to ping engine")));
+                        }
+                    }
+                },
+                EngineStatus::Starting => {
+                    // Every 500 milliseconds, send a status request to the WebX Router
+                    if last_request_time.elapsed() >= Duration::from_millis(500) {
+                        debug!("Sending status request to WebX Router...");
+                        let status_response = self.send(&session_socket.socket, &status_request)?;
+                        last_request_time = Instant::now();
+
+                        // If status request fails, exit with error
+                        match self.decode_status_response(&status_response) {
+                            Ok(current_engine_status) => {
+                                engine_status = current_engine_status;
+                                match engine_status {
+                                    EngineStatus::Ready => info!("WebX Engine Session is ready!"),
+                                    EngineStatus::Starting => debug!("WebX Engine Session is starting.")
+                                }
+                            },
+                            Err(error) => {
+                                return Err(RouterError::EngineSessionError(format!("Failed to get status of session: {}", error)));
+                            }
+                        }
+                    }
+
                 }
             }
 
@@ -245,10 +275,21 @@ impl Cli {
     fn decode_create_response(&self, response: &str) -> Result<CreationResponse> {
         let response_parts = response.split(',').collect::<Vec<&str>>();
         let response_code_num: u32 = response_parts[0].parse()?;
-        let message = response_parts[1].to_string();
         let code = SessionCreationReturnCodes::try_from(response_code_num)?;
 
-        Ok( CreationResponse { code, message })
+        let message = response_parts[1].to_string();
+
+        let engine_status = match code {
+            SessionCreationReturnCodes::Success => {
+                let engine_status_num: u32 = response_parts[2].parse()?;
+                Some(EngineStatus::try_from(engine_status_num)?)
+            },
+            _ => {
+                None
+            }
+        };
+
+        Ok( CreationResponse { code, message, engine_status })
     }
 
     /// Decodes the ping response string and returns true if it is "pong".
@@ -262,6 +303,20 @@ impl Cli {
         let response_parts = response.split(',').collect::<Vec<&str>>();
 
         response_parts[0] == "pong"
+    }
+
+    /// Decodes the status response string and returns the engine status.
+    ///
+    /// # Arguments
+    /// * `response` - The response string to decode.
+    ///
+    /// # Returns
+    /// * `EngineStatus` - the current engine status
+    fn decode_status_response(&self, response: &str) -> Result<EngineStatus> {
+        let response_parts = response.split(',').collect::<Vec<&str>>();
+
+        let engine_status_num: u32 = response_parts[1].parse()?;
+        Ok(EngineStatus::try_from(engine_status_num)?)
     }
 
     /// Sends a request string over the given ZMQ socket and returns the response as a String.

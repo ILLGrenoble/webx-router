@@ -4,6 +4,7 @@ extern crate log;
 use webx_router::{
     app::Cli,
     router::SessionCreationReturnCodes,
+    engine::EngineStatus,
 };
 
 use structopt::StructOpt;
@@ -89,9 +90,13 @@ fn main() {
                     match response.code {
                         SessionCreationReturnCodes::Success => {
                             let session_id = response.message;
+                            match response.engine_status.as_ref().unwrap_or(&EngineStatus::Starting) {
+                                EngineStatus::Ready => info!("WebX Engine Session with Id {} has been created and is ready", &session_id),
+                                EngineStatus::Starting => info!("WebX Engine Session with Id {} is being created.", &session_id)
+                            }
                             info!("WebX Engine running with session Id {}", &session_id);
                             if !daemon {
-                                if let Err(error) = cli.wait_for_interrupt(&session_id) {
+                                if let Err(error) = cli.wait_for_interrupt(&session_id, response.engine_status.unwrap_or(EngineStatus::Starting)) {
                                     error!("Failed to wait for WebX Engine process: {}", error);
                                     exit_code = 1;
                                 }
@@ -145,7 +150,7 @@ fn setup_logging(verbose: bool) -> Result<(), fern::InitError> {
 
     let base_config = fern::Dispatch::new()
         .format(move |out, message, _| {
-            out.finish(format_args!("{}", &message.to_string()))
+            out.finish(format_args!("{}  {}", &chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(), &message.to_string()))
         })
         .level(logging_level)
         .chain(std::io::stdout());
