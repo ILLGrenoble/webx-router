@@ -1,3 +1,16 @@
+1.5.0 07/07/2025
+================
+ * cli does async creation and then polls the status.
+ * Add session_proxy action to get status of a session. Polling from clients allows them to determine when a session is running.
+ * Add a timeout to sync session creation.
+ * Handle create_async action in session_proxy. Check for ready Xorg in synchronous creation.
+ * Check in thread for Xorg being ready to accept connections. Send status info of creation process to clients.
+ * Async creation process of Xorg, window manager and engine (keeping legacy synchronous action): separate creation of xorg and wm. 
+ * copy EnvList vars into a Vec so that it can be cloned easily. Store the AuthenticatedSession with the X11Session.
+ * Refactoring management of x11_sessions into the x11_session_manager rather than xorg_service. Better mutex handling of session vector.
+ * Refactoring: engine_session does not reference x11_session.
+ * Refactoring to perform the authentication immediately from the session_proxy. The x11_session_manager only produces X11 processes (no auth).
+
 1.4.2 02/07/2025
 ================
  * If requests to the engine fail then recreate the socket to it (sockets may be created prematurely).
