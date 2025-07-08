@@ -1,6 +1,6 @@
 [Unit]
 Description=WebX Router 
-After=network.target
+After=multi-user.target
 
 [Service]
 Type=simple
