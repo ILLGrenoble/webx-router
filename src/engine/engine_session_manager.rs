@@ -210,6 +210,8 @@ impl EngineSessionManager {
         for process in creation_processes_clone.iter() {
             if let Some(x11_session) = all_x11_sessions.iter().find(|session| session.id() == process.session_id()) {
 
+                debug!("Xorg-Status-Checker: Testing whether Xorg is ready for session id \"{}\" on display \"{}\"", x11_session.id(), x11_session.display_id());
+
                 if x11_session.is_xorg_ready() {
                     // Start the window manager
                     info!("Xorg-Status-Checker: Xorg is now running, creating window manager for session id \"{}\" on display \"{}\"", x11_session.id(), x11_session.display_id());

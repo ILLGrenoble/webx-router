@@ -76,6 +76,8 @@ impl SessionProxy {
 
         let event_bus_sub_socket = EventBus::create_event_subscriber(&self.context, &[INPROC_APP_TOPIC, INPROC_SESSION_TOPIC])?;
 
+        self.is_running.store(true, Ordering::SeqCst);
+
         // Create the thread to update session creations
         self.create_session_startup_thread();
 
@@ -84,7 +86,6 @@ impl SessionProxy {
             secure_rep_socket.as_poll_item(zmq::POLLIN),
         ];
 
-        self.is_running.store(true, Ordering::SeqCst);
         while self.is_running.load(Ordering::SeqCst) {
             // Poll both sockets
             if zmq::poll(&mut items, 5000).is_ok() {
