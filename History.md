@@ -1,3 +1,7 @@
+1.5.2 30/07/2025
+================
+ * Fix bug on create_session_startup_thread stopping immediately.
+
 1.5.1 08/07/2025
 ================
  * Modify the service so that it starts after the multi-user target rather than network.
