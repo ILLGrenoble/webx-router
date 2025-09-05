@@ -77,7 +77,7 @@ impl XorgService {
         }
 
         // spawn the window manager
-        self.spawn_window_manager(x11_session.id(), x11_session.display_id(), x11_session.xauthority_file_path(), x11_session.authenticated_session())
+        self.spawn_window_manager(x11_session.id(), x11_session.display_id(), x11_session.xauthority_file_path(), x11_session.resolution(), x11_session.authenticated_session())
     }
 
     /// Generates a random Xauth cookie for authentication.
@@ -214,6 +214,7 @@ impl XorgService {
                             session_id: &str,
                             display: &str,
                             authority_file_path: &str,
+                            resolution: &ScreenResolution,
                             authenticated_session: &AuthenticatedSession) -> Result<ProcessHandle> {
 
         let account = authenticated_session.account();
@@ -233,6 +234,8 @@ impl XorgService {
             .env("XAUTHORITY", authority_file_path)
             .env("HOME", account.home())
             .env("XDG_RUNTIME_DIR", xdg_run_time_dir)
+            .env("WEBX_START_WIDTH", resolution.width().to_string())
+            .env("WEBX_START_HEIGHT", resolution.height().to_string())
             .envs(environment)
             .current_dir(account.home())
             .stdout(std::process::Stdio::from(stdout_file))
