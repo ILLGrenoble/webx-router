@@ -174,24 +174,24 @@ impl XorgService {
             .stderr(std::process::Stdio::from(stderr_file));
 
         // Convert u32 groups to Gid and set supplementary groups
-        let gids: Vec<Gid> = account.groups().iter().map(|&g| Gid::from_raw(g)).collect();
-        let uid = Uid::from_raw(account.uid());
-        let gid = Gid::from_raw(account.gid());
+        // let gids: Vec<Gid> = account.groups().iter().map(|&g| Gid::from_raw(g)).collect();
+        // let uid = Uid::from_raw(account.uid());
+        // let gid = Gid::from_raw(account.gid());
 
 
-        unsafe {
-            // The `pre_exec` function is used to set the user and group IDs before executing the command
-            // This is necessary to ensure the remote desktop runs with the correct permissions
-            // and can access the user's home directory and other resources.
-            // Alternative the the .groups method of Command could be used but this requires the nightly/unstable version of rust
-            command
-                .pre_exec(move || {
-                    setgroups(&gids)?;
-                    setgid(gid)?;
-                    setuid(uid)?;
-                    Ok(())
-                });
-        }
+        // unsafe {
+        //     // The `pre_exec` function is used to set the user and group IDs before executing the command
+        //     // This is necessary to ensure the remote desktop runs with the correct permissions
+        //     // and can access the user's home directory and other resources.
+        //     // Alternative the the .groups method of Command could be used but this requires the nightly/unstable version of rust
+        //     command
+        //         .pre_exec(move || {
+        //             setgroups(&gids)?;
+        //             setgid(gid)?;
+        //             setuid(uid)?;
+        //             Ok(())
+        //         });
+        // }
 
         debug!("Spawning command: {}", format!("{:?}", command).replace('\"', ""));
         ProcessHandle::new(&mut command).map_err(|e| {
