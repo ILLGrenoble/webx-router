@@ -1,3 +1,7 @@
+1.5.3 05/09/2025
+================
+ * run Xorg as root rather than with the user privileges (allows Xorg to run using nvidia drivers rather than xrdp driver)
+
 1.5.2 30/07/2025
 ================
  * Fix bug on create_session_startup_thread stopping immediately.
