@@ -1,3 +1,7 @@
+1.5.4 08/09/2025
+================
+ * Add run_as_root to xorg settings to allow Xorg to be run optionally as the root user.
+
 1.5.3 05/09/2025
 ================
  * Send resolution as env vars to window manager
