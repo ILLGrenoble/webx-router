@@ -163,37 +163,39 @@ impl XorgService {
             .env_clear()
             .env("DISPLAY", display)
             .env("XAUTHORITY", authority_file_path)
-            .env("HOME", account.home())
-            .env("XORG_RUN_AS_USER_OK", "1")
-            .env("XDG_RUNTIME_DIR", xdg_run_time_dir)
             .env("XRDP_START_WIDTH", resolution.width().to_string())
             .env("XRDP_START_HEIGHT", resolution.height().to_string())
-            .envs(environment)
-            .current_dir(account.home())
             .stdout(std::process::Stdio::from(stdout_file))
             .stderr(std::process::Stdio::from(stderr_file));
 
-        // Convert u32 groups to Gid and set supplementary groups
-        // let gids: Vec<Gid> = account.groups().iter().map(|&g| Gid::from_raw(g)).collect();
-        // let uid = Uid::from_raw(account.uid());
-        // let gid = Gid::from_raw(account.gid());
+        if !self.settings.run_as_root {
+            // Convert u32 groups to Gid and set supplementary groups
+            let gids: Vec<Gid> = account.groups().iter().map(|&g| Gid::from_raw(g)).collect();
+            let uid = Uid::from_raw(account.uid());
+            let gid = Gid::from_raw(account.gid());
 
 
-        // unsafe {
-        //     // The `pre_exec` function is used to set the user and group IDs before executing the command
-        //     // This is necessary to ensure the remote desktop runs with the correct permissions
-        //     // and can access the user's home directory and other resources.
-        //     // Alternative the the .groups method of Command could be used but this requires the nightly/unstable version of rust
-        //     command
-        //         .pre_exec(move || {
-        //             setgroups(&gids)?;
-        //             setgid(gid)?;
-        //             setuid(uid)?;
-        //             Ok(())
-        //         });
-        // }
+            unsafe {
+                // The `pre_exec` function is used to set the user and group IDs before executing the command
+                // This is necessary to ensure the remote desktop runs with the correct permissions
+                // and can access the user's home directory and other resources.
+                // Alternative the the .groups method of Command could be used but this requires the nightly/unstable version of rust
+                command
+                    .env("HOME", account.home())
+                    .env("XDG_RUNTIME_DIR", xdg_run_time_dir)
+                    .env("XORG_RUN_AS_USER_OK", "1")
+                    .envs(environment)
+                    .current_dir(account.home())
+                    .pre_exec(move || {
+                        setgroups(&gids)?;
+                        setgid(gid)?;
+                        setuid(uid)?;
+                        Ok(())
+                    });
+            }
+        }
 
-        debug!("Spawning command: {}", format!("{:?}", command).replace('\"', ""));
+        debug!("Spawning command as {}: {}", if self.settings.run_as_root {"root"} else { account.username() }, format!("{:?}", command).replace('\"', ""));
         ProcessHandle::new(&mut command).map_err(|e| {
             error!("Failed to spawn Xorg server process: {}", e);
             RouterError::X11SessionError(format!("Failed to spawn Xorg server: {}", e))

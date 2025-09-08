@@ -29,6 +29,8 @@ sesman:
     sessions_path: /run/webx/sessions
     # path for the xorg configuration
     config_path: /etc/X11/xrdp/xorg.conf
+    # Run as root or user
+    run_as_root: false
     # ext available display will start from this offset
     display_offset: 60
     # script to launch the window manager of your choice

@@ -52,6 +52,7 @@ pub struct XorgSettings {
     pub lock_path: String,
     pub sessions_path: String,
     pub config_path: String,
+    pub run_as_root: bool,
     pub display_offset: u32,
     pub window_manager: String,
 }
