@@ -51,7 +51,8 @@ pub struct XorgSettings {
     pub log_path: String,
     pub lock_path: String,
     pub sessions_path: String,
-    pub config_path: String,
+    pub config_path: Option<String>,
+    pub command_params: Option<Vec<String>>,
     pub run_as_root: bool,
     pub display_offset: u32,
     pub window_manager: String,
@@ -110,6 +111,21 @@ static DEFAULT_CONFIG_PATHS: [&str; 2] = ["/etc/webx/webx-router-config.yml", ".
 impl XorgSettings {
     pub fn sessions_path_for_uid(&self, uid: u32) -> String {
         format!("{}/{}", self.sessions_path, uid)
+    }
+
+    /// Returns the command and arguments to use for launching the Xorg server if specified in settings
+    ///
+    /// # Returns
+    /// An Option containing a tuple of:
+    /// - The command to run (String)
+    /// - The arguments to pass to the command (Vec<String>)
+    /// Returns None if no command_params are specified
+    pub fn get_xorg_command(&self) -> Option<(String, Vec<String>)> {
+        self.command_params.as_ref().and_then(|params| {
+            params.split_first().map(|(cmd, args)| {
+                (cmd.to_string(), args.to_vec())
+            })
+        })
     }
 }
 

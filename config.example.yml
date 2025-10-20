@@ -24,11 +24,19 @@ sesman:
   xorg:
     # path to where the x lock files are stored
     lock_path: /tmp
-    # path to where session files should be stored
-    # for example the XAuthority for a session will be stored here
+    # path to where session XAuthority will be stored
     sessions_path: /run/webx/sessions
-    # path for the xorg configuration
-    config_path: /etc/X11/xrdp/xorg.conf
+    # command used to launch the Xorg server
+    command_params:
+      - Xorg
+      - -config
+      - xorg.conf
+      - -noreset
+      - -nolisten
+      - tcp
+      - -verbose
+      - -logfile
+      - .xorg.webx.%s.log
     # Run as root or user
     run_as_root: false
     # ext available display will start from this offset

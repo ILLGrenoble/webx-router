@@ -142,29 +142,44 @@ impl XorgService {
                       authenticated_session: &AuthenticatedSession) -> Result<ProcessHandle> {
         debug!("Launching x server on display {}", display);
         let account = authenticated_session.account();
-        let environment = authenticated_session.environment().clone();
         
-        let config = &self.settings.config_path;
         let stdout_file = File::create(&format!("{}/{}.xorg.out.log", self.settings.log_path, session_id))?;
         let stderr_file = File::create(&format!("{}/{}.xorg.err.log", self.settings.log_path, session_id))?;
 
-        let xdg_run_time_dir = format!("{}/{}", self.settings.sessions_path, account.uid());
-        let mut command = Command::new("Xorg");
+        // Get base command and arguments from settings, or use defaults
+        let mut command = match self.settings.get_xorg_command() {
+            Some((cmd, params)) => {
+                let mut command = Command::new(cmd);
+                command.args([ display, "-auth", authority_file_path ]);
+                command.args(params);
+                command
+            },
+            None => {
+                let mut command = Command::new("Xorg");
+                command.args([ display, "-auth", authority_file_path ]);
+                // Add config if specified
+                if let Some(config_path) = &self.settings.config_path {
+                    command.args([
+                        "-config", 
+                        config_path
+                    ]);
+                }
+                command.arg("-verbose");
+                command
+            }
+        };
 
         command
-            .args([
-                display,
-                "-auth",
-                authority_file_path,
-                "-config",
-                &config,
-                "-verbose",
-            ])
             .env_clear()
             .env("DISPLAY", display)
             .env("XAUTHORITY", authority_file_path)
+            .env("HOME", account.home())
+            .env("XORG_RUN_AS_USER_OK", "1")
             .env("XRDP_START_WIDTH", resolution.width().to_string())
             .env("XRDP_START_HEIGHT", resolution.height().to_string())
+            .env("WEBX_START_WIDTH", resolution.width().to_string())
+            .env("WEBX_START_HEIGHT", resolution.height().to_string())
+            .current_dir(account.home())
             .stdout(std::process::Stdio::from(stdout_file))
             .stderr(std::process::Stdio::from(stderr_file));
 
@@ -181,11 +196,6 @@ impl XorgService {
                 // and can access the user's home directory and other resources.
                 // Alternative the the .groups method of Command could be used but this requires the nightly/unstable version of rust
                 command
-                    .env("HOME", account.home())
-                    .env("XDG_RUNTIME_DIR", xdg_run_time_dir)
-                    .env("XORG_RUN_AS_USER_OK", "1")
-                    .envs(environment)
-                    .current_dir(account.home())
                     .pre_exec(move || {
                         setgroups(&gids)?;
                         setgid(gid)?;
@@ -226,8 +236,6 @@ impl XorgService {
         let stdout_file = File::create(&format!("{}/{}.wm.out.log", log_path, session_id))?;
         let stderr_file = File::create(&format!("{}/{}.wm.err.log", log_path, session_id))?;
 
-        let xdg_run_time_dir = self.settings.sessions_path_for_uid(account.uid());
-
         let mut command = Command::new(&self.settings.window_manager);
 
         command
@@ -235,7 +243,6 @@ impl XorgService {
             .env("DISPLAY", display)
             .env("XAUTHORITY", authority_file_path)
             .env("HOME", account.home())
-            .env("XDG_RUNTIME_DIR", xdg_run_time_dir)
             .env("WEBX_START_WIDTH", resolution.width().to_string())
             .env("WEBX_START_HEIGHT", resolution.height().to_string())
             .envs(environment)
