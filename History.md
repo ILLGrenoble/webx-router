@@ -1,3 +1,7 @@
+1.5.5 20/10/2025
+================
+ * allow for fully customisable Xorg command. Maintain compatibility with previous config file.
+
 1.5.4 08/09/2025
 ================
  * Add run_as_root to xorg settings to allow Xorg to be run optionally as the root user.
