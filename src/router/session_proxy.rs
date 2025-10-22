@@ -444,7 +444,7 @@ impl SessionProxy {
                 }
             }
         } else {
-            error!("Failed to lock EngineSessionManager to ping session with secret {}", secret);
+            error!("Failed to lock EngineSessionManager to ping session");
             format!("pang,{},Failed to lock EngineSessionManager", secret)
         }
     }
@@ -468,7 +468,7 @@ impl SessionProxy {
                 }
             }
         } else {
-            error!("Failed to lock EngineSessionManager to ping session with secret {}", secret);
+            error!("Failed to lock EngineSessionManager to ping session");
             format!("pang,{},Failed to lock EngineSessionManager", secret)
         }
     }
