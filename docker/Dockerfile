@@ -1,17 +1,3 @@
-## -- Debian 11
-FROM rust:1-slim-bullseye AS debian11
-
-WORKDIR /app
-
-RUN apt update
-RUN apt install -y libzmq3-dev pkg-config dpkg-dev libclang-dev libpam-dev clang
-
-COPY . .
-
-RUN cargo install cargo-deb
-RUN cargo deb
-
-
 ## -- Debian 12
 FROM rust:1-slim-bookworm AS debian12
 
@@ -24,26 +10,6 @@ COPY . .
 
 RUN cargo install cargo-deb
 RUN cargo deb
-
-
-## -- Ubuntu 20.04
-FROM ubuntu:20.04 AS ubuntu20
-
-WORKDIR /app
-
-RUN apt-get update
-RUN DEBIAN_FRONTEND=noninteractive apt install -y apt-utils curl gcc libzmq3-dev pkg-config dpkg-dev libclang-dev libpam-dev clang
-
-# Install Rust
-RUN curl https://sh.rustup.rs -sSf > /tmp/rustup-init.sh \
-    && chmod +x /tmp/rustup-init.sh \
-    && sh /tmp/rustup-init.sh -y \
-    && rm -rf /tmp/rustup-init.sh
-
-COPY . .
-
-RUN ~/.cargo/bin/cargo install cargo-deb
-RUN ~/.cargo/bin/cargo deb
 
 
 ## -- Ubuntu 22.04
