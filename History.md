@@ -1,3 +1,7 @@
+1.5.6 11/02/2026
+================
+ * Remove secret from error messages
+
 1.5.5 20/10/2025
 ================
  * allow for fully customisable Xorg command. Maintain compatibility with previous config file.
