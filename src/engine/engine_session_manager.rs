@@ -283,13 +283,23 @@ impl EngineSessionManager {
     /// * `Err(RouterError)` - If the session could not be created or retrieved.
     fn get_or_create_engine_session(&mut self, x11_session: &X11Session, session_config: SessionConfig) -> Result<String> {
         // See if session already exists matching x11_session attributes
-        if let Some(session) = self.sessions.iter().find(|session| 
+        if let Some(session) = self.sessions.iter_mut().find(|session| 
             session.username() == x11_session.account().username() && 
             session.id() == x11_session.id() && 
             session.display_id() == x11_session.display_id()) {
 
-            info!("Found existing Engine Session for user \"{}\" on display \"{}\" with id \"{}\"", session.username(), session.display_id(), session.id());
-            return Ok(session.secret().to_string());
+            info!("Found existing Engine Session for user \"{}\" on display \"{}\" with id \"{}\": performing health check...", session.username(), session.display_id(), session.id());
+
+            // Check if the engine session is OK
+            match self.engine_service.validate_engine(session.engine_mut(), 1) {
+                Ok(_) => {
+                    debug!("Verified that WebX Engine is running for user \"{}\" with session id \"{}\" on display \"{}\"", session.username(), session.id(), session.display_id());
+                    return Ok(session.secret().to_string());
+                },
+                Err(_) => {
+                    warn!("Comms failed with WebX Engine for user \"{}\" with session id \"{}\" on display \"{}\". Will create a new one.", session.username(), session.id(), session.display_id());
+                }
+            }
         }
 
         // Remove existing sessions for the user

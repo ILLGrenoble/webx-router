@@ -1,5 +1,6 @@
 use std::process::Command;
 use std::sync::Arc;
+use std::time::Duration;
 
 use shared_child::SharedChild;
 
@@ -31,7 +32,15 @@ impl ProcessHandle {
     /// A `Result` indicating success or an `ApplicationError` if the process could not be killed.
     pub fn kill(&self) -> Result<()> {
         return match self.process.kill() {
-            Ok(_) => Ok(()),
+            Ok(_) => {
+                match self.process.wait_timeout(Duration::from_millis(1000)) {
+                    Ok(_) => Ok(()),
+                    Err(error) => {
+                        warn!("Failed to wait for process exit [pid={}]. Error: {}", self.process.id(), error);
+                        Ok(())
+                    }
+                }
+            },
             Err(error) => Err(RouterError::IoError(error))
         }
     }
