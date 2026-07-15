@@ -1,7 +1,8 @@
 1.5.7 15/07/2026
 ================
  * Validate Engine health when connecting to it: create new engine if needed.
- * Wait for process kill to ensure child processes are killed correctly (removed zombies).
+ * Validate Engine health when connecting to it: create new engine if needed.
+ * Update build targets
 
 1.5.6 11/02/2026
 ================
